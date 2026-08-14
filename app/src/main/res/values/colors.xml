@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="bg">#FF101418</color>
+    <color name="surface">#FF1C2228</color>
+    <color name="accent">#FFFFB300</color>
+    <color name="accent_dark">#FFE65100</color>
+    <color name="ok">#FF66BB6A</color>
+    <color name="warn">#FFFFCA28</color>
+    <color name="error">#FFEF5350</color>
+    <color name="text">#FFEEF2F5</color>
+    <color name="muted">#FF9AA4AD</color>
+    <color name="test">#FF29B6F6</color>
+    <color name="loop">#FFFF7043</color>
+</resources>
