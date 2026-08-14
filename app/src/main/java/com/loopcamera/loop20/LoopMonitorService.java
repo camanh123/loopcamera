@@ -19,8 +19,8 @@ public class LoopMonitorService extends Service {
 
     public static final String ACTION_START = "com.loopcamera.loop20.START";
     public static final String ACTION_STOP = "com.loopcamera.loop20.STOP";
-    private static final String CHANNEL_ID = "camera_loop_20";
-    private static final int NOTIF_ID = 20;
+    private static final String CHANNEL_ID = "camera_loop_10";
+    private static final int NOTIF_ID = 10;
 
     private final AtomicBoolean running = new AtomicBoolean(false);
     private Thread worker;
@@ -112,7 +112,7 @@ public class LoopMonitorService extends Service {
             return;
         }
         PowerManager pm = (PowerManager) getSystemService(POWER_SERVICE);
-        wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "CameraLoop20:watch");
+        wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "CameraLoop10:watch");
         wakeLock.setReferenceCounted(false);
         wakeLock.acquire();
     }
@@ -129,7 +129,7 @@ public class LoopMonitorService extends Service {
                 CHANNEL_ID,
                 getString(R.string.notification_channel),
                 NotificationManager.IMPORTANCE_LOW);
-        ch.setDescription("Theo dõi USB/DCIM cho loop 20 video");
+        ch.setDescription("Theo dõi USB/DCIM cho loop 10 video");
         NotificationManager nm = getSystemService(NotificationManager.class);
         nm.createNotificationChannel(ch);
     }

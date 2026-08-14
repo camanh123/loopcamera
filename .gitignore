@@ -7,6 +7,6 @@ build/
 app/build/
 captures/
 *.apk
-!release/CameraLoop20.apk
+!release/CameraLoop10.apk
 *.idsig
 *.apk.idsig

@@ -9,7 +9,7 @@ public final class AppPreferences {
     public static final String MODE_TEST = "TEST";
     public static final String MODE_LOOP = "LOOP";
 
-    private static final String PREF = "camera_loop_20";
+    private static final String PREF = "camera_loop_10";
     private static final String KEY_TREE = "tree_uri";
     private static final String KEY_MODE = "mode";
     private static final String KEY_EXTS = "video_extensions";

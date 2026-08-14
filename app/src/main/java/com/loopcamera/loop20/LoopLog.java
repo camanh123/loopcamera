@@ -17,7 +17,7 @@ public final class LoopLog {
         void onLogChanged(String fullText);
     }
 
-    private static final String TAG = "CameraLoop20";
+    private static final String TAG = "CameraLoop10";
     private static final int MAX_LINES = 200;
     private static final LoopLog INSTANCE = new LoopLog();
 

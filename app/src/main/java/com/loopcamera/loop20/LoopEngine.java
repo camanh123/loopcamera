@@ -14,7 +14,7 @@ import java.util.Set;
 
 /**
  * Watches the granted DCIM tree, waits for files to stop growing, then either
- * simulates (TEST MODE) or rotates 20 loop slots (LOOP MODE).
+ * simulates (TEST MODE) or rotates 10 loop slots (LOOP MODE).
  */
 public final class LoopEngine {
 
@@ -253,7 +253,7 @@ public final class LoopEngine {
                 LoopLog.get().w("Không thấy " + action.fromName + " để xóa — bỏ qua (đã trống)");
                 return true;
             }
-            LoopLog.get().i("Xóa video 20: " + action.fromName);
+            LoopLog.get().i("Xóa video " + LoopPlanner.MAX_VIDEOS + ": " + action.fromName);
             if (!store.delete(target)) {
                 LoopLog.get().e("Xóa thất bại: " + action.fromName);
                 return false;

@@ -136,7 +136,7 @@ public class MainActivity extends AppCompatActivity {
         }
         new AlertDialog.Builder(this)
                 .setTitle("Bật LOOP MODE?")
-                .setMessage("LOOP MODE sẽ XÓA video 20 và ĐỔI TÊN 19→20 … 01→02, rồi đưa video mới vào 01.\n\n"
+                .setMessage("LOOP MODE sẽ XÓA video 10 và ĐỔI TÊN 09→10 … 01→02, rồi đưa video mới vào 01.\n\n"
                         + "TEST MODE thì không đụng file.\n\nChỉ bật khi bạn chắc USB/DCIM đúng.")
                 .setNegativeButton("Hủy", null)
                 .setPositiveButton("Bật LOOP MODE", (d, w) -> {

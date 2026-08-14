@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Camera Loop 20</string>
-    <string name="notification_channel">Camera Loop 20</string>
+    <string name="app_name">Camera Loop 10</string>
+    <string name="notification_channel">Camera Loop 10</string>
     <string name="notification_text">Đang theo dõi thư mục DCIM</string>
 </resources>

@@ -10,17 +10,17 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * Pure Java planner for the 20-clip loop.
- * 01 = newest, 20 = oldest.
+ * Pure Java planner for the 10-clip loop.
+ * 01 = newest, 10 = oldest.
  */
 public final class LoopPlanner {
 
-    public static final int MAX_VIDEOS = 20;
-    public static final String TXN_NAME = "cameraloop20.txn";
+    public static final int MAX_VIDEOS = 10;
+    public static final String TXN_NAME = "cameraloop10.txn";
     public static final String DEFAULT_EXTENSIONS = "mp4";
 
     private static final Pattern SLOT_NAME =
-            Pattern.compile("^(0[1-9]|1[0-9]|20)\\.mp4$", Pattern.CASE_INSENSITIVE);
+            Pattern.compile("^(0[1-9]|10)\\.mp4$", Pattern.CASE_INSENSITIVE);
 
     private LoopPlanner() {
     }
@@ -96,7 +96,7 @@ public final class LoopPlanner {
 
     /**
      * Build the exact operation list for one newly completed camera clip.
-     * Order: delete 20, then 19-&gt;20 ... 01-&gt;02, then new-&gt;01.
+     * Order: delete 10, then 09-&gt;10 ... 01-&gt;02, then new-&gt;01.
      */
     public static List<Action> planForNewVideo(Set<Integer> occupiedSlots, String newVideoName) {
         List<Action> actions = new ArrayList<>();

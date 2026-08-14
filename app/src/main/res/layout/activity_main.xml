@@ -15,7 +15,7 @@
             android:id="@+id/txtTitle"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="Camera Loop 20"
+            android:text="Camera Loop 10"
             android:textColor="@color/accent"
             android:textSize="26sp"
             android:textStyle="bold" />
@@ -24,7 +24,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="4dp"
-            android:text="Loop tối đa 20 video trên USB/DCIM (Android 10, không root)"
+            android:text="Loop tối đa 10 video trên USB/DCIM (Android 10, không root)"
             android:textColor="@color/muted"
             android:textSize="13sp" />
 
@@ -61,7 +61,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="8dp"
-            android:text="Video count: 0 / 20"
+            android:text="Video count: 0 / 10"
             android:textColor="@color/accent"
             android:textSize="20sp"
             android:textStyle="bold" />

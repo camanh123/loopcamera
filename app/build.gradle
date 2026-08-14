@@ -38,7 +38,7 @@ android {
 
     applicationVariants.configureEach { variant ->
         variant.outputs.configureEach { output ->
-            output.outputFileName = "CameraLoop20.apk"
+            output.outputFileName = "CameraLoop10.apk"
         }
     }
 }
