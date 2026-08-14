@@ -6,7 +6,10 @@ import android.database.Cursor;
 import android.net.Uri;
 import android.provider.DocumentsContract;
 import android.text.TextUtils;
+import android.webkit.MimeTypeMap;
 
+import java.io.File;
+import java.io.FileOutputStream;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
@@ -14,8 +17,8 @@ import java.util.List;
 import java.util.Locale;
 
 /**
- * Storage Access Framework access to the user-granted tree only.
- * Never uses hardcoded USB mount paths.
+ * Access to the user-selected DCIM folder via SAF tree URI or a discovered File path.
+ * Never hard-codes a single USB mount UUID.
  */
 public final class DcimStore {
 
@@ -33,10 +36,36 @@ public final class DcimStore {
         this.resolver = context.getContentResolver();
     }
 
-    public Folder open(Uri selectedTree) {
-        if (selectedTree == null) {
+    public Folder open(Uri selected) {
+        if (selected == null) {
             return null;
         }
+        if (isFileUri(selected)) {
+            String path = selected.getPath();
+            if (path == null || path.isEmpty()) {
+                return null;
+            }
+            return openFile(new File(path));
+        }
+        return openSaf(selected);
+    }
+
+    public Folder openFile(File dir) {
+        if (dir == null || !dir.isDirectory()) {
+            return null;
+        }
+        File working = dir;
+        File nested = new File(dir, "DCIM");
+        if (nested.isDirectory()) {
+            working = nested;
+        }
+        if (working.list() == null) {
+            return null;
+        }
+        return new Folder(Uri.fromFile(working), working.getAbsolutePath(), working.getAbsolutePath(), working);
+    }
+
+    private Folder openSaf(Uri selectedTree) {
         String rootId;
         try {
             rootId = DocumentsContract.getTreeDocumentId(selectedTree);
@@ -44,7 +73,7 @@ public final class DcimStore {
             LoopLog.get().e("URI cây không hợp lệ", e);
             return null;
         }
-        List<DcimEntry> top = listChildren(selectedTree, rootId);
+        List<DcimEntry> top = listSafChildren(selectedTree, rootId);
         if (top == null) {
             return null;
         }
@@ -57,12 +86,7 @@ public final class DcimStore {
                 break;
             }
         }
-        if (queryName(selectedTree, parentId) != null && "DCIM".equalsIgnoreCase(label)) {
-            // already DCIM or found DCIM child
-        } else if (top.isEmpty() && label != null) {
-            // empty folder is still accessible
-        }
-        Folder folder = new Folder(selectedTree, parentId, label == null ? "DCIM" : label);
+        Folder folder = new Folder(selectedTree, parentId, label == null ? "DCIM" : label, null);
         if (listChildren(folder) == null) {
             return null;
         }
@@ -77,10 +101,36 @@ public final class DcimStore {
         if (folder == null) {
             return null;
         }
-        return listChildren(folder.treeUri, folder.parentDocumentId);
+        if (folder.directory != null) {
+            return listFileChildren(folder.directory);
+        }
+        return listSafChildren(folder.treeUri, folder.parentDocumentId);
     }
 
-    public List<DcimEntry> listChildren(Uri treeUri, String parentDocumentId) {
+    private List<DcimEntry> listFileChildren(File dir) {
+        File[] files = dir.listFiles();
+        if (files == null) {
+            return null;
+        }
+        List<DcimEntry> out = new ArrayList<>();
+        for (File f : files) {
+            boolean isDir = f.isDirectory();
+            String mime = isDir
+                    ? DocumentsContract.Document.MIME_TYPE_DIR
+                    : mimeFromName(f.getName());
+            out.add(new DcimEntry(
+                    Uri.fromFile(f),
+                    f.getAbsolutePath(),
+                    f.getName(),
+                    mime,
+                    f.lastModified(),
+                    f.length(),
+                    isDir));
+        }
+        return out;
+    }
+
+    private List<DcimEntry> listSafChildren(Uri treeUri, String parentDocumentId) {
         if (treeUri == null || parentDocumentId == null) {
             return null;
         }
@@ -138,6 +188,18 @@ public final class DcimStore {
     }
 
     public boolean delete(DcimEntry entry) {
+        if (entry == null) {
+            return false;
+        }
+        if (isFileUri(entry.uri)) {
+            File f = new File(entry.documentId);
+            try {
+                return f.delete();
+            } catch (Exception e) {
+                LoopLog.get().e("Lỗi xóa " + entry.displayName, e);
+                return false;
+            }
+        }
         try {
             return DocumentsContract.deleteDocument(resolver, entry.uri);
         } catch (Exception e) {
@@ -147,6 +209,19 @@ public final class DcimStore {
     }
 
     public boolean rename(DcimEntry entry, String newName) {
+        if (entry == null || newName == null) {
+            return false;
+        }
+        if (isFileUri(entry.uri)) {
+            File from = new File(entry.documentId);
+            File to = new File(from.getParentFile(), newName);
+            try {
+                return from.renameTo(to);
+            } catch (Exception e) {
+                LoopLog.get().e("Lỗi đổi tên " + entry.displayName + " → " + newName, e);
+                return false;
+            }
+        }
         try {
             DocumentsContract.renameDocument(resolver, entry.uri, newName);
             return true;
@@ -157,6 +232,17 @@ public final class DcimStore {
     }
 
     public boolean writeTxn(Folder folder, String content) {
+        if (folder != null && folder.directory != null) {
+            File target = new File(folder.directory, LoopPlanner.TXN_NAME);
+            try (FileOutputStream os = new FileOutputStream(target, false)) {
+                os.write(content.getBytes(StandardCharsets.UTF_8));
+                os.flush();
+                return true;
+            } catch (Exception e) {
+                LoopLog.get().e("Không ghi được file giao dịch fail-safe", e);
+                return false;
+            }
+        }
         try {
             DcimEntry existing = findByName(folder, LoopPlanner.TXN_NAME);
             Uri target = existing != null ? existing.uri : null;
@@ -204,6 +290,10 @@ public final class DcimStore {
         return String.format(Locale.US, "%.2f MB", kb / 1024.0);
     }
 
+    public static boolean isFileUri(Uri uri) {
+        return uri != null && "file".equalsIgnoreCase(uri.getScheme());
+    }
+
     private String queryName(Uri treeUri, String documentId) {
         Uri docUri = DocumentsContract.buildDocumentUriUsingTree(treeUri, documentId);
         try (Cursor c = resolver.query(docUri, new String[]{
@@ -220,15 +310,30 @@ public final class DcimStore {
         return null;
     }
 
+    private static String mimeFromName(String name) {
+        String ext = LoopPlanner.extensionOf(name);
+        if (ext.isEmpty()) {
+            return "application/octet-stream";
+        }
+        String mime = MimeTypeMap.getSingleton().getMimeTypeFromExtension(ext);
+        return mime != null ? mime : "application/octet-stream";
+    }
+
     public static final class Folder {
         public final Uri treeUri;
         public final String parentDocumentId;
         public final String label;
+        public final File directory;
 
-        public Folder(Uri treeUri, String parentDocumentId, String label) {
+        public Folder(Uri treeUri, String parentDocumentId, String label, File directory) {
             this.treeUri = treeUri;
             this.parentDocumentId = parentDocumentId;
             this.label = label;
+            this.directory = directory;
+        }
+
+        public boolean isFileMode() {
+            return directory != null;
         }
     }
 }

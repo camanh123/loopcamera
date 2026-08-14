@@ -1,6 +1,9 @@
 package com.loopcamera.loop20;
 
+import android.Manifest;
 import android.content.Intent;
+import android.content.pm.PackageManager;
+import android.content.pm.ResolveInfo;
 import android.net.Uri;
 import android.os.Bundle;
 import android.view.View;
@@ -8,13 +11,20 @@ import android.widget.Button;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.core.app.ActivityCompat;
+import androidx.core.content.ContextCompat;
+
+import java.io.File;
+import java.util.List;
 
 public class MainActivity extends AppCompatActivity {
 
-    private static final int REQ_TREE = 20;
+    private static final int REQ_TREE = 10;
+    private static final int REQ_STORAGE = 11;
 
     private AppPreferences prefs;
     private TextView txtFolder;
@@ -59,7 +69,16 @@ public class MainActivity extends AppCompatActivity {
         btnStop = findViewById(R.id.btnStopLoop);
         btnClearFailsafe = findViewById(R.id.btnClearFailsafe);
 
-        findViewById(R.id.btnChooseFolder).setOnClickListener(v -> openFolderPicker());
+        findViewById(R.id.btnChooseFolder).setOnClickListener(v -> {
+            try {
+                openFolderPicker();
+            } catch (Throwable t) {
+                CrashLog.write(this, t);
+                LoopLog.get().e("Crash khi bấm CHỌN THƯ MỤC", t);
+                Toast.makeText(this, "Trình chọn hệ thống lỗi. Chuyển sang quét USB.", Toast.LENGTH_LONG).show();
+                requestStorageThenScanUsb();
+            }
+        });
         btnTest.setOnClickListener(v -> setTestMode());
         btnLoop.setOnClickListener(v -> confirmLoopMode());
         btnStop.setOnClickListener(v -> setTestMode());
@@ -85,25 +104,139 @@ public class MainActivity extends AppCompatActivity {
         super.onStop();
     }
 
+    /**
+     * Head units like CARFU often have no DocumentsUI. Launching
+     * ACTION_OPEN_DOCUMENT_TREE without a handler throws ActivityNotFoundException
+     * and kills the app. Default path is USB scan; SAF is optional and guarded.
+     */
     private void openFolderPicker() {
+        boolean saf = hasSafDocumentTreePicker();
+        LoopLog.get().i("CHỌN THƯ MỤC: SAF picker=" + saf
+                + (saf ? " (" + safPickerComponent() + ")" : " — thiết bị không có DocumentsUI"));
+        requestStorageThenScanUsb();
+    }
+
+    private boolean hasSafDocumentTreePicker() {
         Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE);
-        intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION
-                | Intent.FLAG_GRANT_WRITE_URI_PERMISSION
-                | Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION
-                | Intent.FLAG_GRANT_PREFIX_URI_PERMISSION);
-        startActivityForResult(intent, REQ_TREE);
+        return intent.resolveActivity(getPackageManager()) != null;
+    }
+
+    private String safPickerComponent() {
+        Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE);
+        ResolveInfo info = getPackageManager().resolveActivity(intent, PackageManager.MATCH_DEFAULT_ONLY);
+        if (info == null || info.activityInfo == null) {
+            return "none";
+        }
+        return info.activityInfo.packageName + "/" + info.activityInfo.name;
+    }
+
+    private void requestStorageThenScanUsb() {
+        boolean read = ContextCompat.checkSelfPermission(this, Manifest.permission.READ_EXTERNAL_STORAGE)
+                == PackageManager.PERMISSION_GRANTED;
+        boolean write = ContextCompat.checkSelfPermission(this, Manifest.permission.WRITE_EXTERNAL_STORAGE)
+                == PackageManager.PERMISSION_GRANTED;
+        if (!read || !write) {
+            LoopLog.get().i("Xin quyền bộ nhớ để quét USB/DCIM (Android 10 File API).");
+            ActivityCompat.requestPermissions(this, new String[]{
+                    Manifest.permission.READ_EXTERNAL_STORAGE,
+                    Manifest.permission.WRITE_EXTERNAL_STORAGE
+            }, REQ_STORAGE);
+            return;
+        }
+        showUsbChooser();
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions,
+                                           @NonNull int[] grantResults) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        if (requestCode != REQ_STORAGE) {
+            return;
+        }
+        boolean granted = false;
+        for (int r : grantResults) {
+            if (r == PackageManager.PERMISSION_GRANTED) {
+                granted = true;
+                break;
+            }
+        }
+        if (!granted) {
+            LoopLog.get().w("Quyền bộ nhớ bị từ chối — vẫn thử quét USB (một số head unit cho đọc USB không cần quyền).");
+        } else {
+            LoopLog.get().i("Đã có quyền bộ nhớ.");
+        }
+        showUsbChooser();
+    }
+
+    private void showUsbChooser() {
+        List<UsbLocator.Candidate> found = UsbLocator.findDcimCandidates(this);
+        AlertDialog.Builder b = new AlertDialog.Builder(this);
+        b.setTitle("Chọn thư mục DCIM");
+        if (found.isEmpty()) {
+            b.setMessage("Không thấy thư mục DCIM trên USB.\n\n"
+                    + "Hãy cắm USB, chờ Android mount xong, rồi bấm Quét lại.\n"
+                    + "App không hard-code đường dẫn; nó quét volume đang gắn.");
+            b.setPositiveButton("Quét lại", (d, w) -> showUsbChooser());
+            if (hasSafDocumentTreePicker()) {
+                b.setNeutralButton("Trình hệ thống", (d, w) -> launchSafPickerGuarded());
+            }
+            b.setNegativeButton("Hủy", null);
+            b.show();
+            LoopLog.get().w("Không tìm thấy DCIM. USB có thể chưa mount hoặc không đọc được.");
+            return;
+        }
+        CharSequence[] items = new CharSequence[found.size()];
+        for (int i = 0; i < found.size(); i++) {
+            items[i] = found.get(i).display();
+        }
+        b.setItems(items, (d, which) -> selectFileFolder(found.get(which).directory));
+        if (hasSafDocumentTreePicker()) {
+            b.setNeutralButton("Trình hệ thống", (d, w) -> launchSafPickerGuarded());
+        }
+        b.setNegativeButton("Hủy", null);
+        b.show();
+    }
+
+    private void launchSafPickerGuarded() {
+        try {
+            Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE);
+            intent.putExtra("android.content.extra.SHOW_ADVANCED", true);
+            if (intent.resolveActivity(getPackageManager()) == null) {
+                LoopLog.get().e("Không có Activity cho ACTION_OPEN_DOCUMENT_TREE — bỏ qua SAF.");
+                Toast.makeText(this, "Head unit không hỗ trợ SAF", Toast.LENGTH_LONG).show();
+                return;
+            }
+            LoopLog.get().i("Mở SAF ACTION_OPEN_DOCUMENT_TREE");
+            startActivityForResult(intent, REQ_TREE);
+        } catch (Throwable t) {
+            CrashLog.write(this, t);
+            LoopLog.get().e("SAF startActivityForResult crash (thường là ActivityNotFoundException trên head unit)", t);
+            Toast.makeText(this, "SAF không chạy được trên máy này. Dùng quét USB.", Toast.LENGTH_LONG).show();
+            showUsbChooser();
+        }
+    }
+
+    private void selectFileFolder(File dir) {
+        Uri uri = Uri.fromFile(dir);
+        prefs.setTreeUri(uri);
+        prefs.setMode(AppPreferences.MODE_TEST);
+        LoopLog.get().i("Đã chọn DCIM (File/USB): " + dir.getAbsolutePath());
+        LoopLog.get().i("TEST MODE mặc định — không xóa/đổi tên cho đến khi bật LOOP MODE.");
+        LoopMonitorService.start(this);
+        Toast.makeText(this, "Đã chọn: " + dir.getAbsolutePath(), Toast.LENGTH_LONG).show();
     }
 
     @Override
     protected void onActivityResult(int requestCode, int resultCode, @Nullable Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
-        if (requestCode != REQ_TREE || resultCode != RESULT_OK || data == null) {
+        if (requestCode != REQ_TREE) {
+            return;
+        }
+        if (resultCode != RESULT_OK || data == null || data.getData() == null) {
+            LoopLog.get().w("SAF bị hủy hoặc không trả thư mục. Có thể chọn bằng quét USB.");
             return;
         }
         Uri uri = data.getData();
-        if (uri == null) {
-            return;
-        }
         int takeFlags = data.getFlags()
                 & (Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
         try {

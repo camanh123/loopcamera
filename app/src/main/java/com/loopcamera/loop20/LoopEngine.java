@@ -120,6 +120,11 @@ public final class LoopEngine {
         }
 
         lastDetail = "USB/DCIM: Connected";
+        if (folder.isFileMode()) {
+            lastDetail += " (File/USB)";
+        } else {
+            lastDetail += " (SAF)";
+        }
         if (prefs.isFailsafe()) {
             lastDetail += " | FAILSAFE — không xóa/đổi tên";
         } else if (processing) {
