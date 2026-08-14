@@ -10,8 +10,8 @@ android {
         applicationId "com.loopcamera.loop20"
         minSdk 29
         targetSdk 29
-        versionCode 1
-        versionName "1.0"
+        versionCode 30
+        versionName "3.0"
     }
 
     signingConfigs {
@@ -38,7 +38,7 @@ android {
 
     applicationVariants.configureEach { variant ->
         variant.outputs.configureEach { output ->
-            output.outputFileName = "CameraLoop10.apk"
+            output.outputFileName = "CameraLoop30.apk"
         }
     }
 }

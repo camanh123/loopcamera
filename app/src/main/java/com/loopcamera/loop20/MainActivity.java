@@ -33,6 +33,7 @@ public class MainActivity extends AppCompatActivity {
     private TextView txtMode;
     private TextView txtNewest;
     private TextView txtOldest;
+    private TextView txtFileState;
     private TextView txtPlan;
     private TextView txtLog;
     private TextView txtFailsafe;
@@ -61,6 +62,7 @@ public class MainActivity extends AppCompatActivity {
         txtMode = findViewById(R.id.txtMode);
         txtNewest = findViewById(R.id.txtNewest);
         txtOldest = findViewById(R.id.txtOldest);
+        txtFileState = findViewById(R.id.txtFileState);
         txtPlan = findViewById(R.id.txtPlan);
         txtLog = findViewById(R.id.txtLog);
         txtFailsafe = findViewById(R.id.txtFailsafe);
@@ -84,7 +86,7 @@ public class MainActivity extends AppCompatActivity {
         btnStop.setOnClickListener(v -> setTestMode());
         btnClearFailsafe.setOnClickListener(v -> confirmClearFailsafe());
 
-        if (prefs.getTreeUri() != null) {
+        if (prefs.hasSavedFolder()) {
             LoopMonitorService.start(this);
         }
         renderState(LoopStateBus.get().latest());
@@ -217,11 +219,11 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void selectFileFolder(File dir) {
-        Uri uri = Uri.fromFile(dir);
-        prefs.setTreeUri(uri);
+        FolderResolver.save(this, prefs, dir);
         prefs.setMode(AppPreferences.MODE_TEST);
-        LoopLog.get().i("Đã chọn DCIM (File/USB): " + dir.getAbsolutePath());
-        LoopLog.get().i("TEST MODE mặc định — không xóa/đổi tên cho đến khi bật LOOP MODE.");
+        LoopLog.get().i("Đã chọn và nhớ thư mục: " + dir.getAbsolutePath()
+                + " (relative=" + prefs.getRelativePath() + ")");
+        LoopLog.get().i("TEST MODE mặc định — không xóa/rename/modify. Tên file timestamp được giữ nguyên.");
         LoopMonitorService.start(this);
         Toast.makeText(this, "Đã chọn: " + dir.getAbsolutePath(), Toast.LENGTH_LONG).show();
     }
@@ -259,8 +261,8 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void confirmLoopMode() {
-        if (prefs.getTreeUri() == null) {
-            Toast.makeText(this, "Hãy chọn thư mục DCIM trước", Toast.LENGTH_LONG).show();
+        if (!prefs.hasSavedFolder()) {
+            Toast.makeText(this, "Hãy chọn thư mục DCIM/Camera trước", Toast.LENGTH_LONG).show();
             return;
         }
         if (prefs.isFailsafe()) {
@@ -269,12 +271,13 @@ public class MainActivity extends AppCompatActivity {
         }
         new AlertDialog.Builder(this)
                 .setTitle("Bật LOOP MODE?")
-                .setMessage("LOOP MODE sẽ XÓA video 10 và ĐỔI TÊN 09→10 … 01→02, rồi đưa video mới vào 01.\n\n"
-                        + "TEST MODE thì không đụng file.\n\nChỉ bật khi bạn chắc USB/DCIM đúng.")
+                .setMessage("LOOP MODE chỉ XÓA video COMPLETE cũ nhất khi có hơn 30 file timestamp hoàn tất.\n\n"
+                        + "Không rename, không sửa nội dung MP4.\n"
+                        + "TEST MODE thì không đụng file.")
                 .setNegativeButton("Hủy", null)
                 .setPositiveButton("Bật LOOP MODE", (d, w) -> {
                     prefs.setMode(AppPreferences.MODE_LOOP);
-                    LoopLog.get().i("LOOP MODE đã bật — sẽ xử lý tự động khi video mới ổn định.");
+                    LoopLog.get().i("LOOP MODE đã bật — chỉ xóa oldest COMPLETE khi > 30. Tên file giữ nguyên.");
                     LoopMonitorService.start(this);
                     Toast.makeText(this, "LOOP MODE", Toast.LENGTH_SHORT).show();
                 })
@@ -284,17 +287,9 @@ public class MainActivity extends AppCompatActivity {
     private void confirmClearFailsafe() {
         new AlertDialog.Builder(this)
                 .setTitle("Xóa cờ FAILSAFE?")
-                .setMessage("Chỉ làm sau khi bạn đã kiểm tra file trong DCIM. App sẽ không tự hoàn tất thao tác dở dang.")
+                .setMessage("Chỉ làm sau khi bạn đã kiểm tra file trong DCIM/Camera.")
                 .setNegativeButton("Hủy", null)
                 .setPositiveButton("Đã kiểm tra", (d, w) -> {
-                    Uri tree = prefs.getTreeUri();
-                    if (tree != null) {
-                        DcimStore store = new DcimStore(this);
-                        DcimStore.Folder folder = store.open(tree);
-                        if (folder != null) {
-                            store.deleteTxn(folder);
-                        }
-                    }
                     prefs.clearFailsafe();
                     prefs.setMode(AppPreferences.MODE_TEST);
                     LoopLog.get().i("Đã xóa FAILSAFE. Quay về TEST MODE.");
@@ -308,17 +303,22 @@ public class MainActivity extends AppCompatActivity {
         }
         String mode = prefs.getMode();
         txtFolder.setText("USB/DCIM: " + s.folderLabel);
-        txtStatus.setText("Status: " + (s.connected ? "USB/DCIM: Connected" : "USB/DCIM: Not connected")
+        txtStatus.setText("Status: " + s.phase
                 + (s.statusDetail.isEmpty() ? "" : "\n" + s.statusDetail));
         txtCount.setText("Video count: " + s.videoCount + " / " + LoopPlanner.MAX_VIDEOS);
         txtMode.setText("Mode: " + (AppPreferences.MODE_LOOP.equals(mode) ? "LOOP MODE" : "TEST MODE"));
-        txtNewest.setText("Video mới nhất: " + s.newest);
-        txtOldest.setText("Video cũ nhất: " + s.oldest);
+        txtNewest.setText("Newest:\n" + s.newest);
+        txtOldest.setText("Oldest:\n" + s.oldest);
+        if (txtFileState != null) {
+            txtFileState.setText("Current state:\nNewest: " + s.newestState
+                    + "\nOldest: " + s.oldestState);
+        }
 
         if (s.planned.isEmpty()) {
-            txtPlan.setText("Thao tác dự kiến: (chưa có video mới đã ổn định)");
+            txtPlan.setText("Predicted action: (không xóa — COMPLETE ≤ "
+                    + LoopPlanner.MAX_VIDEOS + ")");
         } else {
-            StringBuilder sb = new StringBuilder("Thao tác dự kiến:\n");
+            StringBuilder sb = new StringBuilder("Predicted action:\n");
             for (String line : s.planned) {
                 sb.append("• ").append(line).append('\n');
             }

@@ -15,7 +15,7 @@
             android:id="@+id/txtTitle"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="Camera Loop 10"
+            android:text="Camera Loop 30"
             android:textColor="@color/accent"
             android:textSize="26sp"
             android:textStyle="bold" />
@@ -24,7 +24,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="4dp"
-            android:text="Loop tối đa 10 video trên USB/DCIM (Android 10, không root)"
+            android:text="Tối đa 30 video timestamp trên USB/DCIM/Camera. Không rename."
             android:textColor="@color/muted"
             android:textSize="13sp" />
 
@@ -52,7 +52,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="14dp"
-            android:text="Status:\nUSB/DCIM: Not connected"
+            android:text="Status:\nWaiting for USB"
             android:textColor="@color/text"
             android:textSize="16sp" />
 
@@ -61,7 +61,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="8dp"
-            android:text="Video count: 0 / 10"
+            android:text="Video count: 0 / 30"
             android:textColor="@color/accent"
             android:textSize="20sp"
             android:textStyle="bold" />
@@ -142,7 +142,7 @@
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="Không xóa file. Chỉ mô phỏng thao tác."
+            android:text="Không xóa / không rename / không sửa file. Chỉ mô phỏng."
             android:textColor="@color/muted"
             android:textSize="13sp" />
 
@@ -151,7 +151,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="8dp"
-            android:text="Video mới nhất: —"
+            android:text="Newest: —"
             android:textColor="@color/text"
             android:textSize="15sp" />
 
@@ -160,8 +160,17 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="4dp"
-            android:text="Video cũ nhất: —"
+            android:text="Oldest: —"
             android:textColor="@color/text"
+            android:textSize="15sp" />
+
+        <TextView
+            android:id="@+id/txtFileState"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="Current state: —"
+            android:textColor="@color/warn"
             android:textSize="15sp" />
 
         <TextView
@@ -172,7 +181,7 @@
             android:background="@color/surface"
             android:fontFamily="monospace"
             android:padding="10dp"
-            android:text="Thao tác dự kiến: —"
+            android:text="Predicted action: —"
             android:textColor="@color/warn"
             android:textSize="13sp" />
 

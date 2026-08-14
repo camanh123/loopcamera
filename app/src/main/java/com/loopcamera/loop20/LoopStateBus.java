@@ -14,7 +14,8 @@ public final class LoopStateBus {
     private static final LoopStateBus INSTANCE = new LoopStateBus();
     private final CopyOnWriteArrayList<Listener> listeners = new CopyOnWriteArrayList<>();
     private final Handler main = new Handler(Looper.getMainLooper());
-    private volatile LoopUiState latest = LoopUiState.disconnected(AppPreferences.MODE_TEST, false, "");
+    private volatile LoopUiState latest = LoopUiState.idle(AppPreferences.MODE_TEST, false, "",
+            LoopUiState.PHASE_IDLE, "Chưa chọn thư mục");
 
     public static LoopStateBus get() {
         return INSTANCE;

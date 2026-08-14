@@ -41,77 +41,95 @@ public final class UsbLocator {
 
     public static List<Candidate> findDcimCandidates(Context context) {
         LinkedHashMap<String, Candidate> out = new LinkedHashMap<>();
-        List<File> roots = new ArrayList<>();
+        List<File> roots = listVolumeRoots(context);
         List<String> rootLabels = new ArrayList<>();
         List<Boolean> removableFlags = new ArrayList<>();
-
-        StorageManager sm = (StorageManager) context.getSystemService(Context.STORAGE_SERVICE);
-        if (sm != null) {
-            for (StorageVolume vol : sm.getStorageVolumes()) {
-                File path = volumePath(vol);
-                if (path == null) {
-                    LoopLog.get().w("Volume không lấy được path: " + vol);
-                    continue;
-                }
-                boolean removable = vol.isRemovable() || !vol.isPrimary();
-                String desc = vol.getDescription(context);
-                if (desc == null || desc.trim().isEmpty()) {
-                    desc = path.getName();
-                }
-                String state = vol.getState();
-                LoopLog.get().i("Volume: " + desc + " path=" + path.getAbsolutePath()
-                        + " removable=" + vol.isRemovable()
-                        + " primary=" + vol.isPrimary()
-                        + " state=" + state);
-                if (state != null && !Environment.MEDIA_MOUNTED.equals(state)
-                        && !Environment.MEDIA_MOUNTED_READ_ONLY.equals(state)) {
-                    continue;
-                }
-                roots.add(path);
-                rootLabels.add(desc);
-                removableFlags.add(removable);
-            }
+        for (File root : roots) {
+            rootLabels.add(root.getName());
+            removableFlags.add(true);
         }
-
-        addScannedRoots(roots, rootLabels, removableFlags, new File("/storage"), true);
-        addScannedRoots(roots, rootLabels, removableFlags, new File("/mnt/media_rw"), true);
-        addScannedRoots(roots, rootLabels, removableFlags, new File("/mnt/usb_storage"), true);
-        addScannedRoots(roots, rootLabels, removableFlags, new File("/mnt/usb"), true);
-        addScannedRoots(roots, rootLabels, removableFlags, new File("/mnt/usbotg"), true);
 
         for (int i = 0; i < roots.size(); i++) {
             File root = roots.get(i);
-            if (root == null || !root.isDirectory()) {
-                continue;
-            }
-            String key = canonical(root);
-            if (isIgnoredRootName(root.getName())) {
+            if (root == null || !root.isDirectory() || isIgnoredRootName(root.getName())) {
                 continue;
             }
             File dcim = new File(root, "DCIM");
+            File camera = new File(dcim, "Camera");
+            boolean removable = removableFlags.get(i);
+            String label = rootLabels.get(i);
+            if (camera.isDirectory() && canList(camera)) {
+                put(out, camera, label + " / DCIM/Camera", removable, true);
+            }
             if (dcim.isDirectory() && canList(dcim)) {
-                put(out, dcim, rootLabels.get(i) + " / DCIM", removableFlags.get(i), true);
+                put(out, dcim, label + " / DCIM", removable, true);
             } else if (isDcimName(root) && canList(root)) {
-                put(out, root, rootLabels.get(i), removableFlags.get(i), true);
+                File nestedCam = new File(root, "Camera");
+                if (nestedCam.isDirectory() && canList(nestedCam)) {
+                    put(out, nestedCam, label + " / Camera", removable, true);
+                }
+                put(out, root, rootLabels.get(i), removable, true);
             }
         }
 
         List<Candidate> list = new ArrayList<>(out.values());
         list.sort((a, b) -> {
-            if (a.removable != b.removable) {
-                return a.removable ? -1 : 1;
-            }
-            if (a.hasDcimName != b.hasDcimName) {
-                return a.hasDcimName ? -1 : 1;
+            int as = score(a);
+            int bs = score(b);
+            if (as != bs) {
+                return Integer.compare(bs, as);
             }
             return a.directory.getAbsolutePath().compareToIgnoreCase(b.directory.getAbsolutePath());
         });
-        LoopLog.get().i("Tìm thấy " + list.size() + " thư mục DCIM ứng viên.");
+        LoopLog.get().i("Tìm thấy " + list.size() + " thư mục DCIM/Camera ứng viên.");
         return list;
     }
 
-    private static void addScannedRoots(List<File> roots, List<String> labels, List<Boolean> removable,
-                                        File parent, boolean childrenAreVolumes) {
+    private static int score(Candidate c) {
+        int s = 0;
+        String p = c.directory.getAbsolutePath().toLowerCase(Locale.US);
+        if (p.endsWith("/dcim/camera")) {
+            s += 40;
+        } else if (p.endsWith("/camera")) {
+            s += 30;
+        } else if (p.endsWith("/dcim")) {
+            s += 20;
+        }
+        if (c.removable) {
+            s += 10;
+        }
+        return s;
+    }
+
+    public static List<File> listVolumeRoots(Context context) {
+        LinkedHashMap<String, File> roots = new LinkedHashMap<>();
+        StorageManager sm = (StorageManager) context.getSystemService(Context.STORAGE_SERVICE);
+        if (sm != null) {
+            for (StorageVolume vol : sm.getStorageVolumes()) {
+                File path = volumePath(vol);
+                if (path == null) {
+                    continue;
+                }
+                String state = vol.getState();
+                if (state != null && !Environment.MEDIA_MOUNTED.equals(state)
+                        && !Environment.MEDIA_MOUNTED_READ_ONLY.equals(state)) {
+                    continue;
+                }
+                if (isIgnoredRootName(path.getName())) {
+                    continue;
+                }
+                roots.put(canonical(path), path);
+            }
+        }
+        addScannedRootMap(roots, new File("/storage"));
+        addScannedRootMap(roots, new File("/mnt/media_rw"));
+        addScannedRootMap(roots, new File("/mnt/usb_storage"));
+        addScannedRootMap(roots, new File("/mnt/usb"));
+        addScannedRootMap(roots, new File("/mnt/usbotg"));
+        return new ArrayList<>(roots.values());
+    }
+
+    private static void addScannedRootMap(LinkedHashMap<String, File> roots, File parent) {
         if (!parent.isDirectory()) {
             return;
         }
@@ -123,12 +141,37 @@ public final class UsbLocator {
             if (!child.isDirectory() || isIgnoredRootName(child.getName())) {
                 continue;
             }
-            if (childrenAreVolumes) {
-                roots.add(child);
-                labels.add(parent.getName() + "/" + child.getName());
-                removable.add(true);
+            roots.putIfAbsent(canonical(child), child);
+        }
+    }
+
+    public static String relativeToNearestVolume(Context context, File dir) {
+        String abs = canonical(dir);
+        File best = null;
+        for (File root : listVolumeRoots(context)) {
+            String r = canonical(root);
+            if (abs.equals(r) || abs.startsWith(r + "/")) {
+                if (best == null || canonical(best).length() < r.length()) {
+                    best = root;
+                }
             }
         }
+        if (best != null) {
+            String r = canonical(best);
+            if (abs.equals(r)) {
+                return "";
+            }
+            return abs.substring(r.length() + 1);
+        }
+        String upper = abs.toUpperCase(Locale.US);
+        int i = upper.indexOf("/DCIM/");
+        if (i >= 0) {
+            return abs.substring(i + 1);
+        }
+        if (upper.endsWith("/DCIM")) {
+            return "DCIM";
+        }
+        return dir.getName();
     }
 
     private static void put(LinkedHashMap<String, Candidate> out, File dir, String label,
@@ -138,7 +181,7 @@ public final class UsbLocator {
             return;
         }
         out.put(key, new Candidate(dir, label, removable, hasDcim));
-        LoopLog.get().i("Ứng viên DCIM: " + dir.getAbsolutePath() + " (" + label + ")");
+        LoopLog.get().i("Ứng viên: " + dir.getAbsolutePath() + " (" + label + ")");
     }
 
     private static boolean canList(File dir) {

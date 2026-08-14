@@ -1,75 +1,54 @@
 package com.loopcamera.loop20;
 
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.HashSet;
-import java.util.List;
 import java.util.Locale;
-import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * Pure Java planner for the 10-clip loop.
- * 01 = newest, 10 = oldest.
+ * Camera Loop 30: keep original timestamp filenames, never rename.
+ * Managed files: YYYYMMDD_HHhMMmSSs.mp4
  */
 public final class LoopPlanner {
 
-    public static final int MAX_VIDEOS = 10;
-    public static final String TXN_NAME = "cameraloop10.txn";
-    public static final String DEFAULT_EXTENSIONS = "mp4";
+    public static final int MAX_VIDEOS = 30;
+    public static final String FILENAME_EXAMPLE = "20260814_10h56m24s.mp4";
 
-    private static final Pattern SLOT_NAME =
-            Pattern.compile("^(0[1-9]|10)\\.mp4$", Pattern.CASE_INSENSITIVE);
+    /** Size must be unchanged for this long before a file can be COMPLETE. */
+    public static final long DEFAULT_STABLE_MS = 12_000L;
+    /** File must have been observed at least this long. */
+    public static final long DEFAULT_MIN_AGE_MS = 12_000L;
+    public static final long POLL_MS = 2_000L;
+    public static final long MIN_STABLE_BYTES = 32_768L;
+    /** After this much size-stable time, MMR still failing → INVALID (never delete). */
+    public static final long INVALID_AFTER_STABLE_MS = 60_000L;
+
+    private static final Pattern TIMESTAMP_NAME = Pattern.compile(
+            "^(\\d{8})_(\\d{2})h(\\d{2})m(\\d{2})s\\.mp4$",
+            Pattern.CASE_INSENSITIVE);
 
     private LoopPlanner() {
     }
 
-    public static String slotName(int n) {
-        return String.format(Locale.US, "%02d.mp4", n);
+    public static boolean isManagedVideo(String displayName) {
+        return displayName != null && TIMESTAMP_NAME.matcher(displayName.trim()).matches();
     }
 
-    public static Integer slotNumber(String displayName) {
+    /**
+     * Sort key from filename only (not mtime). YYYYMMDDHHMMSS as long, or -1 if not managed.
+     */
+    public static long timestampSortKey(String displayName) {
         if (displayName == null) {
-            return null;
+            return -1L;
         }
-        Matcher m = SLOT_NAME.matcher(displayName.trim());
+        Matcher m = TIMESTAMP_NAME.matcher(displayName.trim());
         if (!m.matches()) {
-            return null;
+            return -1L;
         }
-        return Integer.parseInt(m.group(1));
-    }
-
-    public static boolean isSlotName(String displayName) {
-        return slotNumber(displayName) != null;
-    }
-
-    public static boolean isTxnName(String displayName) {
-        return TXN_NAME.equalsIgnoreCase(displayName);
-    }
-
-    public static Set<String> parseExtensions(String configured) {
-        Set<String> out = new HashSet<>();
-        if (configured == null || configured.trim().isEmpty()) {
-            configured = DEFAULT_EXTENSIONS;
+        try {
+            return Long.parseLong(m.group(1) + m.group(2) + m.group(3) + m.group(4));
+        } catch (NumberFormatException e) {
+            return -1L;
         }
-        String[] parts = configured.split("[,;\\s]+");
-        for (String p : parts) {
-            if (p == null) {
-                continue;
-            }
-            String ext = p.trim().toLowerCase(Locale.US);
-            if (ext.startsWith(".")) {
-                ext = ext.substring(1);
-            }
-            if (!ext.isEmpty()) {
-                out.add(ext);
-            }
-        }
-        if (out.isEmpty()) {
-            out.add("mp4");
-        }
-        return out;
     }
 
     public static String extensionOf(String displayName) {
@@ -83,66 +62,10 @@ public final class LoopPlanner {
         return displayName.substring(dot + 1).toLowerCase(Locale.US);
     }
 
-    public static boolean isVideoFile(String displayName, Set<String> extensions) {
-        if (displayName == null || displayName.startsWith(".")) {
-            return false;
-        }
-        if (isTxnName(displayName)) {
-            return false;
-        }
-        String ext = extensionOf(displayName);
-        return extensions.contains(ext);
-    }
-
-    /**
-     * Build the exact operation list for one newly completed camera clip.
-     * Order: delete 10, then 09-&gt;10 ... 01-&gt;02, then new-&gt;01.
-     */
-    public static List<Action> planForNewVideo(Set<Integer> occupiedSlots, String newVideoName) {
-        List<Action> actions = new ArrayList<>();
-        if (occupiedSlots.contains(MAX_VIDEOS)) {
-            actions.add(Action.delete(slotName(MAX_VIDEOS)));
-        }
-        for (int i = MAX_VIDEOS - 1; i >= 1; i--) {
-            if (occupiedSlots.contains(i)) {
-                actions.add(Action.rename(slotName(i), slotName(i + 1)));
-            }
-        }
-        actions.add(Action.rename(newVideoName, slotName(1)));
-        return Collections.unmodifiableList(actions);
-    }
-
-    public static String describe(Action action) {
-        if (action.type == Action.Type.DELETE) {
-            return "XÓA " + action.fromName;
-        }
-        return "ĐỔI TÊN " + action.fromName + " → " + action.toName;
-    }
-
-    public static final class Action {
-        public enum Type { DELETE, RENAME }
-
-        public final Type type;
-        public final String fromName;
-        public final String toName;
-
-        private Action(Type type, String fromName, String toName) {
-            this.type = type;
-            this.fromName = fromName;
-            this.toName = toName;
-        }
-
-        public static Action delete(String name) {
-            return new Action(Type.DELETE, name, null);
-        }
-
-        public static Action rename(String from, String to) {
-            return new Action(Type.RENAME, from, to);
-        }
-
-        @Override
-        public String toString() {
-            return describe(this);
-        }
+    public enum FileState {
+        WAITING,
+        NOT_READY,
+        INVALID,
+        COMPLETE
     }
 }

@@ -9,9 +9,6 @@ import android.text.TextUtils;
 import android.webkit.MimeTypeMap;
 
 import java.io.File;
-import java.io.FileOutputStream;
-import java.io.OutputStream;
-import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -54,15 +51,10 @@ public final class DcimStore {
         if (dir == null || !dir.isDirectory()) {
             return null;
         }
-        File working = dir;
-        File nested = new File(dir, "DCIM");
-        if (nested.isDirectory()) {
-            working = nested;
-        }
-        if (working.list() == null) {
+        if (dir.list() == null) {
             return null;
         }
-        return new Folder(Uri.fromFile(working), working.getAbsolutePath(), working.getAbsolutePath(), working);
+        return new Folder(Uri.fromFile(dir), dir.getAbsolutePath(), dir.getAbsolutePath(), dir);
     }
 
     private Folder openSaf(Uri selectedTree) {
@@ -206,77 +198,6 @@ public final class DcimStore {
             LoopLog.get().e("Lỗi xóa " + entry.displayName, e);
             return false;
         }
-    }
-
-    public boolean rename(DcimEntry entry, String newName) {
-        if (entry == null || newName == null) {
-            return false;
-        }
-        if (isFileUri(entry.uri)) {
-            File from = new File(entry.documentId);
-            File to = new File(from.getParentFile(), newName);
-            try {
-                return from.renameTo(to);
-            } catch (Exception e) {
-                LoopLog.get().e("Lỗi đổi tên " + entry.displayName + " → " + newName, e);
-                return false;
-            }
-        }
-        try {
-            DocumentsContract.renameDocument(resolver, entry.uri, newName);
-            return true;
-        } catch (Exception e) {
-            LoopLog.get().e("Lỗi đổi tên " + entry.displayName + " → " + newName, e);
-            return false;
-        }
-    }
-
-    public boolean writeTxn(Folder folder, String content) {
-        if (folder != null && folder.directory != null) {
-            File target = new File(folder.directory, LoopPlanner.TXN_NAME);
-            try (FileOutputStream os = new FileOutputStream(target, false)) {
-                os.write(content.getBytes(StandardCharsets.UTF_8));
-                os.flush();
-                return true;
-            } catch (Exception e) {
-                LoopLog.get().e("Không ghi được file giao dịch fail-safe", e);
-                return false;
-            }
-        }
-        try {
-            DcimEntry existing = findByName(folder, LoopPlanner.TXN_NAME);
-            Uri target = existing != null ? existing.uri : null;
-            if (target == null) {
-                Uri parent = DocumentsContract.buildDocumentUriUsingTree(folder.treeUri, folder.parentDocumentId);
-                target = DocumentsContract.createDocument(resolver, parent, "text/plain", LoopPlanner.TXN_NAME);
-            }
-            if (target == null) {
-                return false;
-            }
-            try (OutputStream os = resolver.openOutputStream(target, "wt")) {
-                if (os == null) {
-                    return false;
-                }
-                os.write(content.getBytes(StandardCharsets.UTF_8));
-                os.flush();
-                return true;
-            }
-        } catch (Exception e) {
-            LoopLog.get().e("Không ghi được file giao dịch fail-safe", e);
-            return false;
-        }
-    }
-
-    public boolean deleteTxn(Folder folder) {
-        DcimEntry txn = findByName(folder, LoopPlanner.TXN_NAME);
-        if (txn == null) {
-            return true;
-        }
-        return delete(txn);
-    }
-
-    public boolean hasTxn(Folder folder) {
-        return findByName(folder, LoopPlanner.TXN_NAME) != null;
     }
 
     public static String formatSize(long bytes) {

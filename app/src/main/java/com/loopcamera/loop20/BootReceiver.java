@@ -8,13 +8,17 @@ public class BootReceiver extends BroadcastReceiver {
     @Override
     public void onReceive(Context context, Intent intent) {
         AppPreferences prefs = new AppPreferences(context);
-        if (prefs.getTreeUri() == null) {
+        if (!prefs.hasSavedFolder()) {
+            LoopLog.get().i("Boot: chưa có thư mục đã lưu — không auto-start.");
             return;
         }
-        LoopLog.get().i("Thiết bị/app khởi động lại — khôi phục theo dõi DCIM (TEST MODE mặc định an toàn).");
-        if (prefs.isLoopMode() && prefs.isFailsafe()) {
-            prefs.setMode(AppPreferences.MODE_TEST);
+        String action = intent != null ? intent.getAction() : "";
+        LoopLog.get().i("BOOT (" + action + ") → start foreground service, chờ USB mount, "
+                + "tìm lại " + prefs.getRelativePath() + " (đã lưu " + prefs.getFolderPath() + ")");
+        try {
+            LoopMonitorService.start(context);
+        } catch (Throwable t) {
+            LoopLog.get().e("Không start được service lúc boot", t);
         }
-        LoopMonitorService.start(context);
     }
 }
