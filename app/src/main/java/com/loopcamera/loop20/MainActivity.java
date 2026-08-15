@@ -3,7 +3,6 @@ package com.loopcamera.loop20;
 import android.Manifest;
 import android.content.Intent;
 import android.content.pm.PackageManager;
-import android.content.pm.ResolveInfo;
 import android.net.Uri;
 import android.os.Bundle;
 import android.view.View;
@@ -89,6 +88,7 @@ public class MainActivity extends AppCompatActivity {
         if (prefs.hasSavedFolder()) {
             LoopMonitorService.start(this);
         }
+        SafDiagnostics.logPermissionCheck(this, prefs, "onCreate");
         renderState(LoopStateBus.get().latest());
     }
 
@@ -110,26 +110,23 @@ public class MainActivity extends AppCompatActivity {
      * Head units like CARFU often have no DocumentsUI. Launching
      * ACTION_OPEN_DOCUMENT_TREE without a handler throws ActivityNotFoundException
      * and kills the app. Default path is USB scan; SAF is optional and guarded.
+     * Diagnostic only: this method still does NOT auto-launch SAF.
      */
     private void openFolderPicker() {
-        boolean saf = hasSafDocumentTreePicker();
-        LoopLog.get().i("CHỌN THƯ MỤC: SAF picker=" + saf
-                + (saf ? " (" + safPickerComponent() + ")" : " — thiết bị không có DocumentsUI"));
+        boolean resolvable = SafDiagnostics.openDocumentTreeResolvable(this);
+        SafDiagnostics.logPermissionCheck(this, prefs, "CHON_THU_MUC");
+        UsbDeleteLog.i(SafDiagnostics.EVENT_PICKER_LAUNCH,
+                "button=CHỌN THƯ MỤC launched=false"
+                + " reason=default_usb_file_scan"
+                + " openDocumentTreeResolvable=" + resolvable
+                + " pickerComponent=" + SafDiagnostics.pickerComponent(this)
+                + " documentsUiPackages=" + SafDiagnostics.documentsUiPackages(this)
+                + " note=SAF_only_if_user_taps_Trình_hệ_thống");
         requestStorageThenScanUsb();
     }
 
     private boolean hasSafDocumentTreePicker() {
-        Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE);
-        return intent.resolveActivity(getPackageManager()) != null;
-    }
-
-    private String safPickerComponent() {
-        Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE);
-        ResolveInfo info = getPackageManager().resolveActivity(intent, PackageManager.MATCH_DEFAULT_ONLY);
-        if (info == null || info.activityInfo == null) {
-            return "none";
-        }
-        return info.activityInfo.packageName + "/" + info.activityInfo.name;
+        return SafDiagnostics.openDocumentTreeResolvable(this);
     }
 
     private void requestStorageThenScanUsb() {
@@ -179,9 +176,7 @@ public class MainActivity extends AppCompatActivity {
                     + "Hãy cắm USB, chờ Android mount xong, rồi bấm Quét lại.\n"
                     + "App không hard-code đường dẫn; nó quét volume đang gắn.");
             b.setPositiveButton("Quét lại", (d, w) -> showUsbChooser());
-            if (hasSafDocumentTreePicker()) {
-                b.setNeutralButton("Trình hệ thống", (d, w) -> launchSafPickerGuarded());
-            }
+            attachOptionalSafPickerButton(b);
             b.setNegativeButton("Hủy", null);
             b.show();
             LoopLog.get().w("Không tìm thấy DCIM. USB có thể chưa mount hoặc không đọc được.");
@@ -192,30 +187,52 @@ public class MainActivity extends AppCompatActivity {
             items[i] = found.get(i).display();
         }
         b.setItems(items, (d, which) -> selectFileFolder(found.get(which).directory));
-        if (hasSafDocumentTreePicker()) {
-            b.setNeutralButton("Trình hệ thống", (d, w) -> launchSafPickerGuarded());
-        }
+        attachOptionalSafPickerButton(b);
         b.setNegativeButton("Hủy", null);
         b.show();
     }
 
+    private void attachOptionalSafPickerButton(AlertDialog.Builder b) {
+        if (hasSafDocumentTreePicker()) {
+            UsbDeleteLog.i(SafDiagnostics.EVENT_PICKER_LAUNCH,
+                    "usb_chooser shows Trình_hệ_thống ACTION_OPEN_DOCUMENT_TREE=AVAILABLE"
+                    + " pickerComponent=" + SafDiagnostics.pickerComponent(this));
+            b.setNeutralButton("Trình hệ thống", (d, w) -> launchSafPickerGuarded());
+        } else {
+            UsbDeleteLog.i(SafDiagnostics.EVENT_PICKER_LAUNCH,
+                    "usb_chooser hides Trình_hệ_thống ACTION_OPEN_DOCUMENT_TREE=UNAVAILABLE documentsUi="
+                    + SafDiagnostics.documentsUiPackages(this));
+        }
+    }
+
     private void launchSafPickerGuarded() {
+        boolean resolvable = SafDiagnostics.openDocumentTreeResolvable(this);
+        UsbDeleteLog.i(SafDiagnostics.EVENT_PICKER_LAUNCH,
+                "source=Trình_hệ_thống_or_grant_dialog"
+                + " action=ACTION_OPEN_DOCUMENT_TREE"
+                + " openDocumentTreeResolvable=" + resolvable
+                + " pickerComponent=" + SafDiagnostics.pickerComponent(this)
+                + " documentsUiPackages=" + SafDiagnostics.documentsUiPackages(this));
         try {
             Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE);
             intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION
                     | Intent.FLAG_GRANT_WRITE_URI_PERMISSION
                     | Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION);
             intent.putExtra("android.content.extra.SHOW_ADVANCED", true);
+            UsbDeleteLog.i(SafDiagnostics.EVENT_PERSISTABLE_FLAGS,
+                    "outgoing read=true write=true persistable=true");
             if (intent.resolveActivity(getPackageManager()) == null) {
-                LoopLog.get().e("Không có Activity cho ACTION_OPEN_DOCUMENT_TREE — bỏ qua SAF.");
+                UsbDeleteLog.e(SafDiagnostics.EVENT_PICKER_LAUNCH,
+                        "launched=false reason=no_activity ACTION_OPEN_DOCUMENT_TREE UNAVAILABLE");
                 Toast.makeText(this, "Head unit không hỗ trợ SAF", Toast.LENGTH_LONG).show();
                 return;
             }
-            LoopLog.get().i("Mở SAF ACTION_OPEN_DOCUMENT_TREE");
+            UsbDeleteLog.i(SafDiagnostics.EVENT_PICKER_LAUNCH, "launched=true startActivityForResult REQ_TREE");
             startActivityForResult(intent, REQ_TREE);
         } catch (Throwable t) {
             CrashLog.write(this, t);
-            LoopLog.get().e("SAF startActivityForResult crash (thường là ActivityNotFoundException trên head unit)", t);
+            UsbDeleteLog.e(SafDiagnostics.EVENT_PICKER_LAUNCH,
+                    "launched=false reason=exception", t);
             Toast.makeText(this, "SAF không chạy được trên máy này. Dùng quét USB.", Toast.LENGTH_LONG).show();
             showUsbChooser();
         }
@@ -238,13 +255,20 @@ public class MainActivity extends AppCompatActivity {
      */
     private void maybeOfferSafWriteGrant(File dir) {
         if (!hasSafDocumentTreePicker()) {
-            LoopLog.get().i("Không có DocumentsUI — xóa USB sẽ dùng MediaStore/DocumentsContract fallback.");
+            UsbDeleteLog.i(SafDiagnostics.EVENT_PERMISSION_CHECK,
+                    "reason=after_file_folder_pick documentsUi=UNAVAILABLE"
+                    + " ACTION_OPEN_DOCUMENT_TREE=UNAVAILABLE"
+                    + " path=" + dir.getAbsolutePath()
+                    + " note=no_SAF_grant_dialog");
             return;
         }
         if (UsbDeleter.hasPersistedTree(this, prefs.getSafTreeUri())) {
-            LoopLog.get().i("Đã có SAF write permission.");
+            UsbDeleteLog.i(SafDiagnostics.EVENT_PERMISSION_CHECK,
+                    "reason=after_file_folder_pick alreadyGranted=true uri=" + prefs.getSafTreeUri());
             return;
         }
+        UsbDeleteLog.i(SafDiagnostics.EVENT_PICKER_LAUNCH,
+                "offering_grant_dialog ACTION_OPEN_DOCUMENT_TREE=AVAILABLE path=" + dir.getAbsolutePath());
         new AlertDialog.Builder(this)
                 .setTitle("Cấp quyền xóa USB (một lần)")
                 .setMessage("Android 10 có thể chặn File.delete() trên USB.\n\n"
@@ -261,27 +285,59 @@ public class MainActivity extends AppCompatActivity {
         if (requestCode != REQ_TREE) {
             return;
         }
-        if (resultCode != RESULT_OK || data == null || data.getData() == null) {
-            LoopLog.get().w("SAF bị hủy hoặc không trả thư mục. Có thể chọn bằng quét USB.");
+        Uri uri = data != null ? data.getData() : null;
+        int intentFlags = data != null ? data.getFlags() : 0;
+        boolean flagRead = (intentFlags & Intent.FLAG_GRANT_READ_URI_PERMISSION) != 0;
+        boolean flagWrite = (intentFlags & Intent.FLAG_GRANT_WRITE_URI_PERMISSION) != 0;
+        boolean flagPersistable = (intentFlags & Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION) != 0;
+        UsbDeleteLog.i(SafDiagnostics.EVENT_PICKER_RESULT,
+                "resultCode=" + resultCode
+                + " resultOk=" + (resultCode == RESULT_OK)
+                + " dataNull=" + (data == null)
+                + " uriNull=" + (uri == null));
+        if (resultCode != RESULT_OK || uri == null) {
+            UsbDeleteLog.w(SafDiagnostics.EVENT_TREE_URI, "none reason=cancelled_or_empty");
             return;
         }
-        Uri uri = data.getData();
+        UsbDeleteLog.i(SafDiagnostics.EVENT_TREE_URI,
+                "uri=" + uri + " scheme=" + uri.getScheme() + " authority=" + uri.getAuthority());
+        UsbDeleteLog.i(SafDiagnostics.EVENT_PERSISTABLE_FLAGS,
+                "intentFlags=" + intentFlags
+                + " grantRead=" + flagRead
+                + " grantWrite=" + flagWrite
+                + " grantPersistable=" + flagPersistable);
+        boolean took = false;
+        String takeApi = "READ|WRITE";
         try {
             getContentResolver().takePersistableUriPermission(uri,
                     Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
+            took = true;
         } catch (SecurityException first) {
+            UsbDeleteLog.e(SafDiagnostics.EVENT_TAKE_PERMISSION,
+                    "attempt=READ|WRITE failed", first);
+            takeApi = "WRITE";
             try {
                 getContentResolver().takePersistableUriPermission(uri,
                         Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
+                took = true;
             } catch (SecurityException e) {
-                LoopLog.get().w("Thiết bị không cho lưu quyền vĩnh viễn — dùng quyền phiên hiện tại.");
+                UsbDeleteLog.e(SafDiagnostics.EVENT_TAKE_PERMISSION,
+                        "attempt=WRITE failed", e);
             }
         }
+        UsbDeleteLog.i(SafDiagnostics.EVENT_TAKE_PERMISSION,
+                "ok=" + took + " api=" + takeApi);
         prefs.setSafTreeUri(uri);
         prefs.setMode(AppPreferences.MODE_TEST);
-        LoopLog.get().i("Đã lưu SAF tree (persistable): " + uri
-                + " granted=" + UsbDeleter.hasPersistedTree(this, uri));
-        LoopLog.get().i("TEST MODE mặc định — không xóa/đổi tên cho đến khi bật LOOP MODE.");
+        Uri restored = prefs.getSafTreeUri();
+        boolean writeGranted = UsbDeleter.hasPersistedTree(this, restored);
+        UsbDeleteLog.i(SafDiagnostics.EVENT_PERSISTED_URI,
+                "stored=" + restored
+                + " matchesReturned=" + (restored != null && restored.equals(uri))
+                + " persistedWrite=" + writeGranted
+                + " " + SafDiagnostics.persistedPermissionDump(this));
+        SafDiagnostics.logDocumentFileResolve(this, restored, "(tree-root)");
+        SafDiagnostics.logPermissionCheck(this, prefs, "after_saf_picker");
         LoopMonitorService.start(this);
     }
 
@@ -324,7 +380,16 @@ public class MainActivity extends AppCompatActivity {
                 .setPositiveButton("Đã kiểm tra", (d, w) -> {
                     prefs.clearFailsafe();
                     prefs.setMode(AppPreferences.MODE_TEST);
-                    LoopLog.get().i("Đã xóa FAILSAFE. Quay về TEST MODE.");
+                    boolean resetOk = DeletePolicy.failsafeResetComplete(
+                            prefs.isFailsafe(), prefs.getDeleteFailStreak(), prefs.getMode());
+                    UsbDeleteLog.i("FAILSAFE_RESET",
+                            "button=ĐÃ KIỂM TRA / XÓA FAILSAFE"
+                            + " failsafe=" + prefs.isFailsafe()
+                            + " streak=" + prefs.getDeleteFailStreak()
+                            + " mode=" + prefs.getMode()
+                            + " complete=" + resetOk);
+                    LoopLog.get().i("Đã xóa FAILSAFE. Quay về TEST MODE. streak=0");
+                    renderState(LoopStateBus.get().latest());
                 })
                 .show();
     }

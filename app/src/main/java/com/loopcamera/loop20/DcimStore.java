@@ -206,7 +206,8 @@ public final class DcimStore {
      * SAF-only path (no POSIX File). Success requires the document to be gone.
      */
     private boolean deleteSafEntry(DcimEntry entry) {
-        LoopLog.get().i("DELETE_ATTEMPT path=" + entry.displayName
+        UsbDeleteLog.i("DELETE_ATTEMPT",
+                "path=" + entry.displayName
                 + " uri=" + entry.uri
                 + " exists=true length=" + entry.size
                 + " readable=n/a writable=n/a canonicalPath=" + entry.documentId);
@@ -220,7 +221,13 @@ public final class DcimStore {
                 api = "DocumentFile.fromSingleUri";
                 returned = single.delete();
                 boolean existsAfter = single.exists();
-                LoopLog.get().i("DELETE_RESULT api=" + api
+                UsbDeleteLog.i("DELETE_SAF",
+                        "api=" + api
+                        + " returned=" + returned
+                        + " existsAfterDelete=" + existsAfter
+                        + " success=" + !existsAfter);
+                UsbDeleteLog.i("DELETE_RESULT",
+                        "api=" + api
                         + " returned=" + returned
                         + " existsAfterDelete=" + existsAfter
                         + " success=" + !existsAfter);
@@ -232,7 +239,12 @@ public final class DcimStore {
             returned = DocumentsContract.deleteDocument(resolver, entry.uri);
             DocumentFile after = DocumentFile.fromSingleUri(appContext, entry.uri);
             boolean existsAfter = after != null && after.exists();
-            LoopLog.get().i("DELETE_RESULT api=" + api
+            UsbDeleteLog.i("DELETE_DOCUMENTS_CONTRACT",
+                    "uri=" + entry.uri
+                    + " returned=" + returned
+                    + " existsAfterDelete=" + existsAfter);
+            UsbDeleteLog.i("DELETE_RESULT",
+                    "api=" + api
                     + " returned=" + returned
                     + " existsAfterDelete=" + existsAfter
                     + " success=" + !existsAfter);
@@ -240,11 +252,11 @@ public final class DcimStore {
         } catch (Exception e) {
             exClass = e.getClass().getName();
             exMsg = e.getMessage();
-            LoopLog.get().i("DELETE_RESULT api=" + api
+            UsbDeleteLog.e("DELETE_RESULT",
+                    "api=" + api
                     + " returned=" + returned
                     + " existsAfterDelete=true"
-                    + " success=false exception=" + exClass + ": " + exMsg);
-            LoopLog.get().e("Lỗi xóa SAF " + entry.displayName, e);
+                    + " success=false exception=" + exClass + ": " + exMsg, e);
             return false;
         }
     }
