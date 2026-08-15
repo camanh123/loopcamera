@@ -47,7 +47,8 @@ public final class UsbDeleter {
             canonical = path;
         }
         boolean hasTree = hasPersistedTree(context, persistedTreeUri);
-        LoopLog.get().i("DELETE_ATTEMPT path=" + path
+        UsbDeleteLog.i("DELETE_ATTEMPT",
+                "path=" + path
                 + " exists=" + existsBefore
                 + " length=" + length
                 + " readable=" + readable
@@ -59,7 +60,7 @@ public final class UsbDeleter {
         if (!existsBefore) {
             UsbDeleteResult gone = new UsbDeleteResult(path, false, length, readable, writable,
                     canonical, "already-absent", true, false, null, null);
-            LoopLog.get().i(gone.resultLog());
+            UsbDeleteLog.i("DELETE_RESULT", gone.resultLog());
             return gone;
         }
 
@@ -73,25 +74,29 @@ public final class UsbDeleter {
         }
         if (file.exists() && persistedTreeUri != null) {
             attempts.add(tryDocumentFileTree(file, persistedTreeUri));
+        } else if (file.exists() && persistedTreeUri == null) {
+            UsbDeleteLog.i("DELETE_SAF", "skipped persistedTreeUri=none existsAfterDelete=" + file.exists());
         }
 
         Attempt last = attempts.isEmpty() ? new Attempt("none", false, null, null) : attempts.get(attempts.size() - 1);
         boolean existsAfter = file.exists();
         UsbDeleteResult result = new UsbDeleteResult(path, existsBefore, length, readable, writable,
                 canonical, last.api, last.returned, existsAfter, last.exClass, last.exMsg);
-        LoopLog.get().i(result.resultLog());
-        for (Attempt a : attempts) {
-            LoopLog.get().i("DELETE_RESULT step api=" + a.api + " returned=" + a.returned
-                    + (a.exClass == null ? "" : " exception=" + a.exClass + ": " + a.exMsg));
-        }
+        UsbDeleteLog.i("DELETE_RESULT", result.resultLog());
         return result;
     }
 
     private Attempt tryFileDelete(File file) {
         try {
             boolean ok = file.delete();
+            boolean existsAfter = file.exists();
+            UsbDeleteLog.i("DELETE_FILE_API",
+                    "api=File.delete returned=" + ok
+                    + " existsAfterDelete=" + existsAfter);
             return new Attempt("File.delete", ok, null, null);
         } catch (Throwable t) {
+            UsbDeleteLog.e("DELETE_FILE_API",
+                    "api=File.delete returned=false existsAfterDelete=" + file.exists(), t);
             return new Attempt("File.delete", false, t.getClass().getName(), t.getMessage());
         }
     }
@@ -99,32 +104,55 @@ public final class UsbDeleter {
     private Attempt tryMediaStore(File file) {
         String path = file.getAbsolutePath();
         Throwable last = null;
+        boolean anyIndexed = false;
         for (Uri collection : mediaCollections()) {
             try {
                 try (Cursor c = resolver.query(collection,
                         new String[]{MediaStore.MediaColumns._ID},
                         MediaStore.MediaColumns.DATA + "=?",
                         new String[]{path}, null)) {
-                    if (c != null && c.moveToFirst()) {
+                    boolean indexed = c != null && c.moveToFirst();
+                    UsbDeleteLog.i("DELETE_MEDIASTORE",
+                            "query collection=" + collection
+                            + " indexed=" + indexed
+                            + " cursorNull=" + (c == null));
+                    if (indexed) {
+                        anyIndexed = true;
                         long id = c.getLong(0);
                         Uri item = ContentUris.withAppendedId(collection, id);
                         int n = resolver.delete(item, null, null);
-                        if (n > 0 || !file.exists()) {
+                        boolean existsAfter = file.exists();
+                        UsbDeleteLog.i("DELETE_MEDIASTORE",
+                                "delete byId item=" + item
+                                + " rows=" + n
+                                + " existsAfterDelete=" + existsAfter);
+                        if (n > 0 || !existsAfter) {
                             return new Attempt("MediaStore.id:" + collection, n > 0, null, null);
                         }
                     }
                 }
                 int n = resolver.delete(collection, MediaStore.MediaColumns.DATA + "=?", new String[]{path});
-                if (n > 0 || !file.exists()) {
+                boolean existsAfter = file.exists();
+                UsbDeleteLog.i("DELETE_MEDIASTORE",
+                        "delete byData collection=" + collection
+                        + " rows=" + n
+                        + " existsAfterDelete=" + existsAfter);
+                if (n > 0 || !existsAfter) {
                     return new Attempt("MediaStore.data:" + collection, n > 0, null, null);
                 }
             } catch (Throwable t) {
                 last = t;
+                UsbDeleteLog.e("DELETE_MEDIASTORE", "collection=" + collection, t);
             }
         }
+        String msg = last == null ? (anyIndexed ? "indexed but delete left file" : "no matching row") : last.getMessage();
+        UsbDeleteLog.i("DELETE_MEDIASTORE",
+                "final indexed=" + anyIndexed
+                + " existsAfterDelete=" + file.exists()
+                + " message=" + msg);
         return new Attempt("MediaStore", false,
                 last == null ? null : last.getClass().getName(),
-                last == null ? "no matching row" : last.getMessage());
+                msg);
     }
 
     private List<Uri> mediaCollections() {
@@ -146,34 +174,62 @@ public final class UsbDeleter {
 
     private Attempt tryDocumentsContract(File file) {
         Throwable last = null;
-        for (String docId : candidateDocumentIds(file)) {
+        List<String> ids = candidateDocumentIds(file);
+        UsbDeleteLog.i("DELETE_DOCUMENTS_CONTRACT",
+                "candidateIds=" + ids.size() + " ids=" + ids);
+        for (String docId : ids) {
             try {
                 Uri doc = DocumentsContract.buildDocumentUri(EXT_STORAGE, docId);
+                UsbDeleteLog.i("DELETE_DOCUMENTS_CONTRACT", "buildDocumentUri=" + doc + " docId=" + docId);
                 boolean ok = DocumentsContract.deleteDocument(resolver, doc);
-                if (ok || !file.exists()) {
+                boolean existsAfter = file.exists();
+                UsbDeleteLog.i("DELETE_DOCUMENTS_CONTRACT",
+                        "deleteDocument uri=" + doc
+                        + " returned=" + ok
+                        + " existsAfterDelete=" + existsAfter);
+                if (ok || !existsAfter) {
                     return new Attempt("DocumentsContract:" + docId, ok, null, null);
                 }
             } catch (Throwable t) {
                 last = t;
+                UsbDeleteLog.e("DELETE_DOCUMENTS_CONTRACT", "buildDocumentUri docId=" + docId, t);
             }
             try {
                 Uri tree = DocumentsContract.buildTreeDocumentUri(EXT_STORAGE, volumeRootId(docId));
                 Uri doc = DocumentsContract.buildDocumentUriUsingTree(tree, docId);
+                UsbDeleteLog.i("DELETE_DOCUMENTS_CONTRACT",
+                        "treeUri=" + tree + " docUsingTree=" + doc + " docId=" + docId);
                 boolean ok = DocumentsContract.deleteDocument(resolver, doc);
-                if (ok || !file.exists()) {
+                boolean existsAfter = file.exists();
+                UsbDeleteLog.i("DELETE_DOCUMENTS_CONTRACT",
+                        "deleteDocument.tree uri=" + doc
+                        + " returned=" + ok
+                        + " existsAfterDelete=" + existsAfter);
+                if (ok || !existsAfter) {
                     return new Attempt("DocumentsContract.tree:" + docId, ok, null, null);
                 }
                 DocumentFile single = DocumentFile.fromSingleUri(context, doc);
+                UsbDeleteLog.i("DELETE_SAF",
+                        "fromSingleUri=" + (single == null ? "null" : single.getUri())
+                        + " exists=" + (single != null && single.exists()));
                 if (single != null && single.exists()) {
                     boolean d = single.delete();
-                    if (d || !file.exists()) {
+                    boolean existsAfterSingle = file.exists();
+                    UsbDeleteLog.i("DELETE_SAF",
+                            "fromSingleUri.delete returned=" + d
+                            + " existsAfterDelete=" + existsAfterSingle);
+                    if (d || !existsAfterSingle) {
                         return new Attempt("DocumentFile.fromSingleUri:" + docId, d, null, null);
                     }
                 }
             } catch (Throwable t) {
                 last = t;
+                UsbDeleteLog.e("DELETE_DOCUMENTS_CONTRACT", "tree docId=" + docId, t);
             }
         }
+        UsbDeleteLog.i("DELETE_DOCUMENTS_CONTRACT",
+                "final existsAfterDelete=" + file.exists()
+                + " message=" + (last == null ? "no document id worked" : last.getMessage()));
         return new Attempt("DocumentsContract", false,
                 last == null ? null : last.getClass().getName(),
                 last == null ? "no document id worked" : last.getMessage());
@@ -182,16 +238,29 @@ public final class UsbDeleter {
     private Attempt tryDocumentFileTree(File file, Uri treeUri) {
         try {
             DocumentFile root = DocumentFile.fromTreeUri(context, treeUri);
+            UsbDeleteLog.i("DELETE_SAF",
+                    "fromTreeUri=" + treeUri
+                    + " root=" + (root == null ? "null" : root.getUri())
+                    + " rootExists=" + (root != null && root.exists()));
             if (root == null) {
                 return new Attempt("DocumentFile.tree", false, null, "fromTreeUri=null");
             }
             DocumentFile target = findInTree(root, file.getName());
+            UsbDeleteLog.i("DELETE_SAF",
+                    "resolvedName=" + file.getName()
+                    + " target=" + (target == null ? "none" : target.getUri())
+                    + " targetExists=" + (target != null && target.exists()));
             if (target == null) {
                 return new Attempt("DocumentFile.tree", false, null, "child not found: " + file.getName());
             }
             boolean ok = target.delete();
+            boolean existsAfter = file.exists();
+            UsbDeleteLog.i("DELETE_SAF",
+                    "tree.delete returned=" + ok
+                    + " existsAfterDelete=" + existsAfter);
             return new Attempt("DocumentFile.tree", ok, null, null);
         } catch (Throwable t) {
+            UsbDeleteLog.e("DELETE_SAF", "fromTreeUri=" + treeUri, t);
             return new Attempt("DocumentFile.tree", false, t.getClass().getName(), t.getMessage());
         }
     }

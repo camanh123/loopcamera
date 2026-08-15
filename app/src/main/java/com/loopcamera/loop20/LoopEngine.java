@@ -55,6 +55,7 @@ public final class LoopEngine {
     }
 
     public synchronized void tick() {
+        deleteFailStreak = prefs.getDeleteFailStreak();
         String mode = prefs.getMode();
         if (!prefs.hasSavedFolder()) {
             LoopStateBus.get().post(LoopUiState.idle(mode, prefs.isFailsafe(), prefs.getFailsafeReason(),
@@ -344,22 +345,28 @@ public final class LoopEngine {
                 LoopLog.get().i("Bỏ xóa — preconditions không đủ (retriever/complete/size).");
                 return;
             }
-            LoopLog.get().i("Xóa oldest COMPLETE: " + again.displayName
+            UsbDeleteLog.i("DELETE_ATTEMPT",
+                    "oldest=" + again.displayName
                     + " size=" + DcimStore.formatSize(again.size)
-                    + " (MMR released before delete)");
+                    + " mmrReleased=true delayMs=200");
             if (!store.delete(again)) {
                 deleteFailStreak++;
-                LoopLog.get().e("Xóa thất bại hoặc existsAfterDelete=true: " + again.displayName
-                        + " streak=" + deleteFailStreak);
+                prefs.setDeleteFailStreak(deleteFailStreak);
+                UsbDeleteLog.e("DELETE_RESULT",
+                        "failed name=" + again.displayName
+                        + " streak=" + deleteFailStreak
+                        + " existsAfterDelete=true");
                 if (DeletePolicy.enterFailsafe(deleteFailStreak)) {
                     enterFailsafe("Xóa oldest thất bại 3 lần. Dừng LOOP để tránh xóa hàng loạt.");
                 }
                 return;
             }
             deleteFailStreak = 0;
+            prefs.setDeleteFailStreak(0);
             tracks.remove(again.documentId);
-            LoopLog.get().i("Đã xóa (existsAfterDelete=false): " + again.displayName
-                    + " — tên các file còn lại giữ nguyên.");
+            UsbDeleteLog.i("DELETE_RESULT",
+                    "success name=" + again.displayName
+                    + " existsAfterDelete=false");
         } finally {
             processing = false;
         }
@@ -377,10 +384,11 @@ public final class LoopEngine {
 
     private void enterFailsafe(String reason) {
         prefs.setFailsafe(true, reason);
+        prefs.setDeleteFailStreak(deleteFailStreak);
         if (prefs.isLoopMode()) {
             prefs.setMode(AppPreferences.MODE_TEST);
         }
-        LoopLog.get().e("FAILSAFE: " + reason);
+        UsbDeleteLog.e("FAILSAFE", reason + " streak=" + deleteFailStreak);
     }
 
     private static final class FileTrack {

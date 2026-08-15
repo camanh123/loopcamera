@@ -20,6 +20,11 @@ public final class DeletePolicy {
         return consecutiveFailures >= FAILSAFE_AFTER;
     }
 
+    /** After the user taps XÓA FAILSAFE: flag off, streak 0, TEST MODE. */
+    public static boolean failsafeResetComplete(boolean failsafeFlag, int failStreak, String mode) {
+        return !failsafeFlag && failStreak == 0 && "TEST".equals(mode);
+    }
+
     /**
      * Success only if the file is gone. A true return from File.delete()
      * while the file still exists is a false positive.

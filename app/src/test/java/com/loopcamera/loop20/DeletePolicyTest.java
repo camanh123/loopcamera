@@ -57,6 +57,14 @@ public class DeletePolicyTest {
     }
 
     @Test
+    public void failsafeResetClearsFlagStreakAndReturnsToTest() {
+        assertFalse(DeletePolicy.failsafeResetComplete(true, 3, "TEST"));
+        assertFalse(DeletePolicy.failsafeResetComplete(false, 3, "TEST"));
+        assertFalse(DeletePolicy.failsafeResetComplete(false, 0, "LOOP"));
+        assertTrue(DeletePolicy.failsafeResetComplete(false, 0, "TEST"));
+    }
+
+    @Test
     public void postDeleteMustSeeFileGone() {
         assertFalse(DeletePolicy.confirmedDeleted(true));
         assertTrue(DeletePolicy.confirmedDeleted(false));

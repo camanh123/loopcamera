@@ -324,7 +324,16 @@ public class MainActivity extends AppCompatActivity {
                 .setPositiveButton("Đã kiểm tra", (d, w) -> {
                     prefs.clearFailsafe();
                     prefs.setMode(AppPreferences.MODE_TEST);
-                    LoopLog.get().i("Đã xóa FAILSAFE. Quay về TEST MODE.");
+                    boolean resetOk = DeletePolicy.failsafeResetComplete(
+                            prefs.isFailsafe(), prefs.getDeleteFailStreak(), prefs.getMode());
+                    UsbDeleteLog.i("FAILSAFE_RESET",
+                            "button=ĐÃ KIỂM TRA / XÓA FAILSAFE"
+                            + " failsafe=" + prefs.isFailsafe()
+                            + " streak=" + prefs.getDeleteFailStreak()
+                            + " mode=" + prefs.getMode()
+                            + " complete=" + resetOk);
+                    LoopLog.get().i("Đã xóa FAILSAFE. Quay về TEST MODE. streak=0");
+                    renderState(LoopStateBus.get().latest());
                 })
                 .show();
     }

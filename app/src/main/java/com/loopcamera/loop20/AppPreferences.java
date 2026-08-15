@@ -20,6 +20,7 @@ public final class AppPreferences {
     private static final String KEY_MODE = "mode";
     private static final String KEY_FAILSAFE = "failsafe";
     private static final String KEY_FAILSAFE_REASON = "failsafe_reason";
+    private static final String KEY_DELETE_FAIL_STREAK = "delete_fail_streak";
     private static final String KEY_STABLE_MS = "stable_ms";
     private static final String KEY_MIN_AGE_MS = "min_age_ms";
 
@@ -105,14 +106,33 @@ public final class AppPreferences {
     }
 
     public void setFailsafe(boolean on, String reason) {
-        prefs.edit()
+        SharedPreferences.Editor e = prefs.edit()
                 .putBoolean(KEY_FAILSAFE, on)
-                .putString(KEY_FAILSAFE_REASON, reason == null ? "" : reason)
+                .putString(KEY_FAILSAFE_REASON, reason == null ? "" : reason);
+        if (on) {
+            e.putInt(KEY_DELETE_FAIL_STREAK, Math.max(getDeleteFailStreak(), DeletePolicy.FAILSAFE_AFTER));
+        }
+        e.apply();
+    }
+
+    /**
+     * "ĐÃ KIỂM TRA / XÓA FAILSAFE" — clears the flag, reason, and consecutive
+     * delete-failure counter so LOOP MODE does not immediately re-trip.
+     */
+    public void clearFailsafe() {
+        prefs.edit()
+                .putBoolean(KEY_FAILSAFE, false)
+                .putString(KEY_FAILSAFE_REASON, "")
+                .putInt(KEY_DELETE_FAIL_STREAK, 0)
                 .apply();
     }
 
-    public void clearFailsafe() {
-        setFailsafe(false, "");
+    public int getDeleteFailStreak() {
+        return prefs.getInt(KEY_DELETE_FAIL_STREAK, 0);
+    }
+
+    public void setDeleteFailStreak(int streak) {
+        prefs.edit().putInt(KEY_DELETE_FAIL_STREAK, Math.max(0, streak)).apply();
     }
 
     public long getStableMs() {
