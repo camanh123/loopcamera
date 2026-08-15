@@ -218,7 +218,7 @@ public final class UsbFilesystemProbe {
             return;
         }
         try {
-            Process p = new ProcessBuilder(argv)
+            java.lang.Process p = new ProcessBuilder(argv)
                     .redirectErrorStream(true)
                     .start();
             String out = readStream(p.getInputStream());
