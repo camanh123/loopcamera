@@ -13,6 +13,7 @@ public final class AppPreferences {
     public static final String MODE_LOOP = "LOOP";
 
     private static final String PREF = "camera_loop_30";
+    private static final String KEY_SAF_TREE = "saf_tree_uri";
     private static final String KEY_TREE = "tree_uri";
     private static final String KEY_FOLDER_PATH = "folder_path";
     private static final String KEY_RELATIVE_PATH = "relative_path";
@@ -44,7 +45,6 @@ public final class AppPreferences {
         SharedPreferences.Editor e = prefs.edit();
         e.putString(KEY_FOLDER_PATH, dir.getAbsolutePath());
         e.putString(KEY_RELATIVE_PATH, relativePath == null ? "" : relativePath);
-        e.putString(KEY_TREE, Uri.fromFile(dir).toString());
         e.apply();
     }
 
@@ -58,6 +58,30 @@ public final class AppPreferences {
 
     public void setTreeUri(Uri uri) {
         prefs.edit().putString(KEY_TREE, uri == null ? null : uri.toString()).apply();
+    }
+
+    /** Persistable SAF tree (content://), never a file:// path. */
+    public Uri getSafTreeUri() {
+        String s = prefs.getString(KEY_SAF_TREE, null);
+        if (s == null || s.isEmpty()) {
+            Uri legacy = getTreeUri();
+            if (legacy != null && "content".equalsIgnoreCase(legacy.getScheme())) {
+                return legacy;
+            }
+            return null;
+        }
+        Uri u = Uri.parse(s);
+        if (u != null && "content".equalsIgnoreCase(u.getScheme())) {
+            return u;
+        }
+        return null;
+    }
+
+    public void setSafTreeUri(Uri uri) {
+        prefs.edit().putString(KEY_SAF_TREE, uri == null ? null : uri.toString()).apply();
+        if (uri != null && "content".equalsIgnoreCase(uri.getScheme())) {
+            setTreeUri(uri);
+        }
     }
 
     public String getMode() {

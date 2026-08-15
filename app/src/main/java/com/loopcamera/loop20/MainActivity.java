@@ -202,6 +202,9 @@ public class MainActivity extends AppCompatActivity {
     private void launchSafPickerGuarded() {
         try {
             Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE);
+            intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION
+                    | Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+                    | Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION);
             intent.putExtra("android.content.extra.SHOW_ADVANCED", true);
             if (intent.resolveActivity(getPackageManager()) == null) {
                 LoopLog.get().e("Không có Activity cho ACTION_OPEN_DOCUMENT_TREE — bỏ qua SAF.");
@@ -226,6 +229,30 @@ public class MainActivity extends AppCompatActivity {
         LoopLog.get().i("TEST MODE mặc định — không xóa/rename/modify. Tên file timestamp được giữ nguyên.");
         LoopMonitorService.start(this);
         Toast.makeText(this, "Đã chọn: " + dir.getAbsolutePath(), Toast.LENGTH_LONG).show();
+        maybeOfferSafWriteGrant(dir);
+    }
+
+    /**
+     * File.delete() on /storage/USB1 is often blocked on Android 10.
+     * Offer a one-time persistable tree grant when DocumentsUI exists.
+     */
+    private void maybeOfferSafWriteGrant(File dir) {
+        if (!hasSafDocumentTreePicker()) {
+            LoopLog.get().i("Không có DocumentsUI — xóa USB sẽ dùng MediaStore/DocumentsContract fallback.");
+            return;
+        }
+        if (UsbDeleter.hasPersistedTree(this, prefs.getSafTreeUri())) {
+            LoopLog.get().i("Đã có SAF write permission.");
+            return;
+        }
+        new AlertDialog.Builder(this)
+                .setTitle("Cấp quyền xóa USB (một lần)")
+                .setMessage("Android 10 có thể chặn File.delete() trên USB.\n\n"
+                        + "Chọn đúng thư mục DCIM/Camera trong trình hệ thống để app xóa được video cũ (LOOP MODE).\n"
+                        + "TEST MODE vẫn không xóa.")
+                .setNegativeButton("Để sau", null)
+                .setPositiveButton("Cấp quyền", (d, w) -> launchSafPickerGuarded())
+                .show();
     }
 
     @Override
@@ -239,16 +266,23 @@ public class MainActivity extends AppCompatActivity {
             return;
         }
         Uri uri = data.getData();
-        int takeFlags = data.getFlags()
-                & (Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
+        int writeFlags = Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION;
         try {
-            getContentResolver().takePersistableUriPermission(uri, takeFlags);
-        } catch (SecurityException e) {
-            LoopLog.get().w("Thiết bị không cho lưu quyền vĩnh viễn — dùng quyền phiên hiện tại.");
+            getContentResolver().takePersistableUriPermission(uri, writeFlags);
+        } catch (SecurityException first) {
+            int takeFlags = data.getFlags() & writeFlags;
+            try {
+                if (takeFlags != 0) {
+                    getContentResolver().takePersistableUriPermission(uri, takeFlags);
+                }
+            } catch (SecurityException e) {
+                LoopLog.get().w("Thiết bị không cho lưu quyền vĩnh viễn — dùng quyền phiên hiện tại.");
+            }
         }
-        prefs.setTreeUri(uri);
+        prefs.setSafTreeUri(uri);
         prefs.setMode(AppPreferences.MODE_TEST);
-        LoopLog.get().i("Đã chọn thư mục SAF: " + uri);
+        LoopLog.get().i("Đã lưu SAF tree (persistable): " + uri
+                + " granted=" + UsbDeleter.hasPersistedTree(this, uri));
         LoopLog.get().i("TEST MODE mặc định — không xóa/đổi tên cho đến khi bật LOOP MODE.");
         LoopMonitorService.start(this);
     }

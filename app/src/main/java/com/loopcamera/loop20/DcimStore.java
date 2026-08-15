@@ -8,6 +8,8 @@ import android.provider.DocumentsContract;
 import android.text.TextUtils;
 import android.webkit.MimeTypeMap;
 
+import androidx.documentfile.provider.DocumentFile;
+
 import java.io.File;
 import java.util.ArrayList;
 import java.util.List;
@@ -28,9 +30,11 @@ public final class DcimStore {
     };
 
     private final ContentResolver resolver;
+    private final Context appContext;
 
     public DcimStore(Context context) {
-        this.resolver = context.getContentResolver();
+        this.appContext = context.getApplicationContext();
+        this.resolver = this.appContext.getContentResolver();
     }
 
     public Folder open(Uri selected) {
@@ -183,19 +187,64 @@ public final class DcimStore {
         if (entry == null) {
             return false;
         }
-        if (isFileUri(entry.uri)) {
-            File f = new File(entry.documentId);
-            try {
-                return f.delete();
-            } catch (Exception e) {
-                LoopLog.get().e("Lỗi xóa " + entry.displayName, e);
-                return false;
-            }
+        File file = null;
+        if (isFileUri(entry.uri) && entry.documentId != null) {
+            file = new File(entry.documentId);
+        } else if (entry.documentId != null && entry.documentId.startsWith("/")) {
+            file = new File(entry.documentId);
         }
+        if (file != null) {
+            UsbDeleter deleter = new UsbDeleter(appContext);
+            Uri tree = new AppPreferences(appContext).getSafTreeUri();
+            UsbDeleteResult result = deleter.deleteVideo(file, tree);
+            return result.success();
+        }
+        return deleteSafEntry(entry);
+    }
+
+    /**
+     * SAF-only path (no POSIX File). Success requires the document to be gone.
+     */
+    private boolean deleteSafEntry(DcimEntry entry) {
+        LoopLog.get().i("DELETE_ATTEMPT path=" + entry.displayName
+                + " uri=" + entry.uri
+                + " exists=true length=" + entry.size
+                + " readable=n/a writable=n/a canonicalPath=" + entry.documentId);
+        String api = "none";
+        boolean returned = false;
+        String exClass = null;
+        String exMsg = null;
         try {
-            return DocumentsContract.deleteDocument(resolver, entry.uri);
+            DocumentFile single = DocumentFile.fromSingleUri(appContext, entry.uri);
+            if (single != null && single.exists()) {
+                api = "DocumentFile.fromSingleUri";
+                returned = single.delete();
+                boolean existsAfter = single.exists();
+                LoopLog.get().i("DELETE_RESULT api=" + api
+                        + " returned=" + returned
+                        + " existsAfterDelete=" + existsAfter
+                        + " success=" + !existsAfter);
+                if (!existsAfter) {
+                    return true;
+                }
+            }
+            api = "DocumentsContract.deleteDocument";
+            returned = DocumentsContract.deleteDocument(resolver, entry.uri);
+            DocumentFile after = DocumentFile.fromSingleUri(appContext, entry.uri);
+            boolean existsAfter = after != null && after.exists();
+            LoopLog.get().i("DELETE_RESULT api=" + api
+                    + " returned=" + returned
+                    + " existsAfterDelete=" + existsAfter
+                    + " success=" + !existsAfter);
+            return DeletePolicy.confirmedDeleted(existsAfter);
         } catch (Exception e) {
-            LoopLog.get().e("Lỗi xóa " + entry.displayName, e);
+            exClass = e.getClass().getName();
+            exMsg = e.getMessage();
+            LoopLog.get().i("DELETE_RESULT api=" + api
+                    + " returned=" + returned
+                    + " existsAfterDelete=true"
+                    + " success=false exception=" + exClass + ": " + exMsg);
+            LoopLog.get().e("Lỗi xóa SAF " + entry.displayName, e);
             return false;
         }
     }

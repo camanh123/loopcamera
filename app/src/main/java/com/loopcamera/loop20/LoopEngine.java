@@ -165,10 +165,7 @@ public final class LoopEngine {
         if (processing) {
             return;
         }
-        if (!prefs.isLoopMode() || prefs.isFailsafe()) {
-            return;
-        }
-        if (complete.size() <= LoopPlanner.MAX_VIDEOS) {
+        if (!DeletePolicy.allowRealDelete(mode, prefs.isFailsafe(), complete.size())) {
             return;
         }
         deleteOldestIfSafe(folder, oldestComplete);
@@ -276,6 +273,10 @@ public final class LoopEngine {
                 r.release();
             } catch (Throwable ignored) {
             }
+            try {
+                r.close();
+            } catch (Throwable ignored) {
+            }
         }
     }
 
@@ -331,19 +332,34 @@ public final class LoopEngine {
                         + again.displayName);
                 return;
             }
+            // probeDurationMs always release()/close() in finally. Brief pause so FUSE
+            // on /storage/USB1 can drop the handle before POSIX/SAF delete.
+            try {
+                Thread.sleep(200);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                return;
+            }
+            if (!DeletePolicy.readyToDelete(true, t.state == LoopPlanner.FileState.COMPLETE, again.size == live.size)) {
+                LoopLog.get().i("Bỏ xóa — preconditions không đủ (retriever/complete/size).");
+                return;
+            }
             LoopLog.get().i("Xóa oldest COMPLETE: " + again.displayName
-                    + " size=" + DcimStore.formatSize(again.size));
+                    + " size=" + DcimStore.formatSize(again.size)
+                    + " (MMR released before delete)");
             if (!store.delete(again)) {
                 deleteFailStreak++;
-                LoopLog.get().e("Xóa thất bại: " + again.displayName);
-                if (deleteFailStreak >= 3) {
+                LoopLog.get().e("Xóa thất bại hoặc existsAfterDelete=true: " + again.displayName
+                        + " streak=" + deleteFailStreak);
+                if (DeletePolicy.enterFailsafe(deleteFailStreak)) {
                     enterFailsafe("Xóa oldest thất bại 3 lần. Dừng LOOP để tránh xóa hàng loạt.");
                 }
                 return;
             }
             deleteFailStreak = 0;
             tracks.remove(again.documentId);
-            LoopLog.get().i("Đã xóa: " + again.displayName + " — tên các file còn lại giữ nguyên.");
+            LoopLog.get().i("Đã xóa (existsAfterDelete=false): " + again.displayName
+                    + " — tên các file còn lại giữ nguyên.");
         } finally {
             processing = false;
         }
