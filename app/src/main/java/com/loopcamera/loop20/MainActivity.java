@@ -266,15 +266,13 @@ public class MainActivity extends AppCompatActivity {
             return;
         }
         Uri uri = data.getData();
-        int writeFlags = Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION;
         try {
-            getContentResolver().takePersistableUriPermission(uri, writeFlags);
+            getContentResolver().takePersistableUriPermission(uri,
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
         } catch (SecurityException first) {
-            int takeFlags = data.getFlags() & writeFlags;
             try {
-                if (takeFlags != 0) {
-                    getContentResolver().takePersistableUriPermission(uri, takeFlags);
-                }
+                getContentResolver().takePersistableUriPermission(uri,
+                        Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
             } catch (SecurityException e) {
                 LoopLog.get().w("Thiết bị không cho lưu quyền vĩnh viễn — dùng quyền phiên hiện tại.");
             }

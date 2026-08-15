@@ -36,6 +36,11 @@ android {
         targetCompatibility JavaVersion.VERSION_17
     }
 
+    lint {
+        // Sideload-only CARFU Android 10 app. Must stay on targetSdk 29.
+        disable 'ExpiredTargetSdkVersion'
+    }
+
     applicationVariants.configureEach { variant ->
         variant.outputs.configureEach { output ->
             output.outputFileName = "CameraLoop30.apk"
