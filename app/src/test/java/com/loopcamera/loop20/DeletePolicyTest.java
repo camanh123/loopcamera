@@ -70,6 +70,18 @@ public class DeletePolicyTest {
     }
 
     @Test
+    public void safLifecycleEventNamesAreStable() {
+        assertEquals("SAF_PICKER_LAUNCH", SafDiagnostics.EVENT_PICKER_LAUNCH);
+        assertEquals("SAF_PICKER_RESULT", SafDiagnostics.EVENT_PICKER_RESULT);
+        assertEquals("SAF_TREE_URI", SafDiagnostics.EVENT_TREE_URI);
+        assertEquals("SAF_PERSISTABLE_FLAGS", SafDiagnostics.EVENT_PERSISTABLE_FLAGS);
+        assertEquals("SAF_TAKE_PERMISSION", SafDiagnostics.EVENT_TAKE_PERMISSION);
+        assertEquals("SAF_PERSISTED_URI", SafDiagnostics.EVENT_PERSISTED_URI);
+        assertEquals("SAF_PERMISSION_CHECK", SafDiagnostics.EVENT_PERMISSION_CHECK);
+        assertEquals("SAF_DOCUMENTFILE_RESOLVE", SafDiagnostics.EVENT_DOCUMENTFILE_RESOLVE);
+    }
+
+    @Test
     public void postDeleteMustSeeFileGone() {
         assertFalse(DeletePolicy.confirmedDeleted(true));
         assertTrue(DeletePolicy.confirmedDeleted(false));

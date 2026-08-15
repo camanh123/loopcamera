@@ -56,6 +56,7 @@ public final class UsbDeleter {
                 + " canonicalPath=" + canonical
                 + " safTree=" + (persistedTreeUri == null ? "none" : persistedTreeUri)
                 + " safWriteGranted=" + hasTree);
+        SafDiagnostics.logDocumentFileResolve(context, persistedTreeUri, file.getName());
 
         if (!existsBefore) {
             UsbDeleteResult gone = new UsbDeleteResult(path, false, length, readable, writable,
@@ -242,6 +243,12 @@ public final class UsbDeleter {
                     "fromTreeUri=" + treeUri
                     + " root=" + (root == null ? "null" : root.getUri())
                     + " rootExists=" + (root != null && root.exists()));
+            UsbDeleteLog.i(SafDiagnostics.EVENT_DOCUMENTFILE_RESOLVE,
+                    "treeUri=" + treeUri
+                    + " root=" + (root == null ? "null" : root.getUri())
+                    + " rootExists=" + (root != null && root.exists())
+                    + " rootCanWrite=" + (root != null && root.canWrite())
+                    + " name=" + file.getName());
             if (root == null) {
                 return new Attempt("DocumentFile.tree", false, null, "fromTreeUri=null");
             }
