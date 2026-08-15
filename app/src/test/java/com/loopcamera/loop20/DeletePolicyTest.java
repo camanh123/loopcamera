@@ -65,6 +65,11 @@ public class DeletePolicyTest {
     }
 
     @Test
+    public void usbDeleteLogcatTagIsCameraLoopUSB() {
+        assertEquals("CameraLoopUSB", UsbDeleteLog.TAG);
+    }
+
+    @Test
     public void postDeleteMustSeeFileGone() {
         assertFalse(DeletePolicy.confirmedDeleted(true));
         assertTrue(DeletePolicy.confirmedDeleted(false));
