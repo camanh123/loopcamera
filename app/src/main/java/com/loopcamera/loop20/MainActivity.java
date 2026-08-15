@@ -1,6 +1,9 @@
 package com.loopcamera.loop20;
 
 import android.Manifest;
+import android.content.ClipData;
+import android.content.ClipboardManager;
+import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.net.Uri;
@@ -40,6 +43,9 @@ public class MainActivity extends AppCompatActivity {
     private Button btnLoop;
     private Button btnStop;
     private Button btnClearFailsafe;
+    private TextView txtProbeVerdict;
+    private TextView txtProbeReport;
+    private UsbFilesystemProbe.Report lastProbe;
 
     private final LoopLog.Listener logListener = text -> {
         if (txtLog != null) {
@@ -69,6 +75,8 @@ public class MainActivity extends AppCompatActivity {
         btnLoop = findViewById(R.id.btnLoopMode);
         btnStop = findViewById(R.id.btnStopLoop);
         btnClearFailsafe = findViewById(R.id.btnClearFailsafe);
+        txtProbeVerdict = findViewById(R.id.txtProbeVerdict);
+        txtProbeReport = findViewById(R.id.txtProbeReport);
 
         findViewById(R.id.btnChooseFolder).setOnClickListener(v -> {
             try {
@@ -85,6 +93,8 @@ public class MainActivity extends AppCompatActivity {
         btnStop.setOnClickListener(v -> setTestMode());
         btnClearFailsafe.setOnClickListener(v -> confirmClearFailsafe());
         findViewById(R.id.btnUsbProbe).setOnClickListener(v -> confirmUsbProbe());
+        findViewById(R.id.btnCopyProbe).setOnClickListener(v -> copyProbeReport());
+        findViewById(R.id.btnExportProbe).setOnClickListener(v -> exportProbeReport());
 
         if (prefs.hasSavedFolder()) {
             LoopMonitorService.start(this);
@@ -121,14 +131,74 @@ public class MainActivity extends AppCompatActivity {
 
     private void startUsbProbe() {
         Toast.makeText(this, "CHỈ KIỂM TRA — KHÔNG XÓA VIDEO", Toast.LENGTH_LONG).show();
+        if (txtProbeVerdict != null) {
+            txtProbeVerdict.setText("PROBE: đang chạy…");
+            txtProbeVerdict.setTextColor(getColor(R.color.warn));
+        }
         new Thread(() -> {
+            UsbFilesystemProbe.Report report;
             try {
-                UsbFilesystemProbe.run(getApplicationContext());
+                report = UsbFilesystemProbe.run(getApplicationContext());
             } catch (Throwable t) {
                 CrashLog.write(this, t);
                 UsbDeleteLog.e("PROBE_START", "probe crashed", t);
+                report = new UsbFilesystemProbe.Report();
+                report.success = false;
+                report.reason = "probe crashed: " + t.getClass().getName() + ": " + t.getMessage();
+                report.exception = t.getClass().getName() + ": " + t.getMessage();
             }
+            final UsbFilesystemProbe.Report shown = report;
+            runOnUiThread(() -> showProbeReport(shown));
         }, "usb-fs-probe").start();
+    }
+
+    private void showProbeReport(UsbFilesystemProbe.Report report) {
+        lastProbe = report;
+        if (txtProbeVerdict != null) {
+            txtProbeVerdict.setText(report.verdictLine() + "\n" + report.reason);
+            txtProbeVerdict.setTextColor(getColor(report.success ? R.color.ok : R.color.error));
+        }
+        if (txtProbeReport != null) {
+            txtProbeReport.setText(report.screenText());
+        }
+        if (txtLog != null) {
+            txtLog.setText(LoopLog.get().text());
+        }
+        Toast.makeText(this, report.verdictLine(), Toast.LENGTH_LONG).show();
+    }
+
+    private void copyProbeReport() {
+        if (lastProbe == null) {
+            Toast.makeText(this, "Chưa có báo cáo. Bấm USB FILESYSTEM PROBE trước.", Toast.LENGTH_LONG).show();
+            return;
+        }
+        ClipboardManager cm = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
+        if (cm == null) {
+            Toast.makeText(this, "Clipboard không dùng được. Dùng EXPORT.", Toast.LENGTH_LONG).show();
+            return;
+        }
+        cm.setPrimaryClip(ClipData.newPlainText("CameraLoopUSB probe",
+                UsbFilesystemProbe.fullExportText(lastProbe)));
+        Toast.makeText(this, "Đã copy báo cáo", Toast.LENGTH_SHORT).show();
+    }
+
+    private void exportProbeReport() {
+        UsbFilesystemProbe.Report report = lastProbe;
+        if (report == null) {
+            Toast.makeText(this, "Chưa có báo cáo. Bấm USB FILESYSTEM PROBE trước.", Toast.LENGTH_LONG).show();
+            return;
+        }
+        File f = UsbFilesystemProbe.exportFile(this, report);
+        if (f == null) {
+            Toast.makeText(this, "EXPORT FAILED", Toast.LENGTH_LONG).show();
+            return;
+        }
+        report.exportPath = f.getAbsolutePath();
+        lastProbe = report;
+        if (txtProbeReport != null) {
+            txtProbeReport.setText(report.screenText());
+        }
+        Toast.makeText(this, "EXPORT: " + f.getAbsolutePath(), Toast.LENGTH_LONG).show();
     }
 
     /**

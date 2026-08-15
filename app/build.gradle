@@ -10,8 +10,8 @@ android {
         applicationId "com.loopcamera.loop20"
         minSdk 29
         targetSdk 29
-        versionCode 34
-        versionName "3.1-probe"
+        versionCode 35
+        versionName "3.1-probe2"
     }
 
     signingConfigs {

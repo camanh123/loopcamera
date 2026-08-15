@@ -66,4 +66,43 @@ public class UsbFilesystemProbeTest {
         assertFalse(LoopPlanner.isManagedVideo(UsbFilesystemProbe.PROBE_NAME));
         assertEquals(30, LoopPlanner.MAX_VIDEOS);
     }
+
+    @Test
+    public void screenReportIncludesRequiredFieldsAndVerdict() {
+        UsbFilesystemProbe.Report r = new UsbFilesystemProbe.Report();
+        r.usbPath = UsbFilesystemProbe.USB_ROOT;
+        r.usbExists = true;
+        r.usbCanRead = true;
+        r.usbCanWrite = false;
+        r.cameraExists = true;
+        r.cameraCanRead = true;
+        r.cameraCanWrite = false;
+        r.fsType = "vfat";
+        r.mountRwRo = "rw";
+        r.mountUid = "1023";
+        r.mountGid = "1023";
+        r.mountOptions = "uid=1023,gid=1023";
+        r.processUid = 10067;
+        r.selinux = "u:r:untrusted_app:s0";
+        r.appDirs = "/storage/emulated/0/Android/data/com.loopcamera.loop20/files";
+        r.probeCreate = "existsAfterCreate=true";
+        r.probeDeleteReturned = "false";
+        r.probeExistsAfterDelete = "true";
+        r.exception = "none";
+        r.success = false;
+        r.reason = "File.delete left existsAfterDelete=true";
+        String text = r.screenText();
+        assertTrue(text.startsWith("PROBE FAILED"));
+        assertTrue(text.contains("1. USB path:"));
+        assertTrue(text.contains("4. USB canWrite: false"));
+        assertTrue(text.contains("7. DCIM/Camera canWrite: false"));
+        assertTrue(text.contains("8. filesystem type: vfat"));
+        assertTrue(text.contains("13. process UID: 10067"));
+        assertTrue(text.contains("16. probe create:"));
+        assertTrue(text.contains("18. probe existsAfterDelete: true"));
+        assertTrue(text.contains("19. exception:"));
+        r.success = true;
+        r.reason = "existsAfterDelete=false";
+        assertTrue(r.screenText().startsWith("PROBE SUCCESS"));
+    }
 }
