@@ -47,6 +47,25 @@
             android:textColor="#FF111111"
             android:textStyle="bold" />
 
+        <Button
+            android:id="@+id/btnUsbProbe"
+            android:layout_width="match_parent"
+            android:layout_height="56dp"
+            android:layout_marginTop="8dp"
+            android:backgroundTint="@color/warn"
+            android:text="USB FILESYSTEM PROBE"
+            android:textColor="#FF111111"
+            android:textStyle="bold" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:text="CHỈ KIỂM TRA — KHÔNG XÓA VIDEO"
+            android:textColor="@color/warn"
+            android:textSize="13sp"
+            android:textStyle="bold" />
+
         <TextView
             android:id="@+id/txtStatus"
             android:layout_width="match_parent"

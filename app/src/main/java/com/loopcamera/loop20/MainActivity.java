@@ -84,6 +84,7 @@ public class MainActivity extends AppCompatActivity {
         btnLoop.setOnClickListener(v -> confirmLoopMode());
         btnStop.setOnClickListener(v -> setTestMode());
         btnClearFailsafe.setOnClickListener(v -> confirmClearFailsafe());
+        findViewById(R.id.btnUsbProbe).setOnClickListener(v -> confirmUsbProbe());
 
         if (prefs.hasSavedFolder()) {
             LoopMonitorService.start(this);
@@ -104,6 +105,30 @@ public class MainActivity extends AppCompatActivity {
         LoopLog.get().removeListener(logListener);
         LoopStateBus.get().removeListener(stateListener);
         super.onStop();
+    }
+
+    private void confirmUsbProbe() {
+        new AlertDialog.Builder(this)
+                .setTitle("USB FILESYSTEM PROBE")
+                .setMessage("CHỈ KIỂM TRA — KHÔNG XÓA VIDEO\n\n"
+                        + "Chỉ tạo/xóa file thử:\n"
+                        + UsbFilesystemProbe.PROBE_PATH
+                        + "\n\nKhông xóa MP4. Không rename. Không SAF.")
+                .setNegativeButton("Hủy", null)
+                .setPositiveButton("Chạy probe", (d, w) -> startUsbProbe())
+                .show();
+    }
+
+    private void startUsbProbe() {
+        Toast.makeText(this, "CHỈ KIỂM TRA — KHÔNG XÓA VIDEO", Toast.LENGTH_LONG).show();
+        new Thread(() -> {
+            try {
+                UsbFilesystemProbe.run(getApplicationContext());
+            } catch (Throwable t) {
+                CrashLog.write(this, t);
+                UsbDeleteLog.e("PROBE_START", "probe crashed", t);
+            }
+        }, "usb-fs-probe").start();
     }
 
     /**
