@@ -38,6 +38,13 @@
             android:exported="false"
             android:foregroundServiceType="dataSync" />
 
+        <service
+            android:name=".WriterDiscoveryService"
+            android:enabled="true"
+            android:exported="false"
+            android:foregroundServiceType="dataSync"
+            android:stopWithTask="false" />
+
         <receiver
             android:name=".BootReceiver"
             android:enabled="true"
