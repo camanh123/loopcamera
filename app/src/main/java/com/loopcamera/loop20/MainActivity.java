@@ -1,6 +1,9 @@
 package com.loopcamera.loop20;
 
 import android.Manifest;
+import android.content.ClipData;
+import android.content.ClipboardManager;
+import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
@@ -41,6 +44,9 @@ public class MainActivity extends AppCompatActivity {
     private Button btnLoop;
     private Button btnStop;
     private Button btnClearFailsafe;
+    private TextView txtProbeVerdict;
+    private TextView txtProbeReport;
+    private RecorderDiscovery.Report lastDiscovery;
 
     private final LoopLog.Listener logListener = text -> {
         if (txtLog != null) {
@@ -70,6 +76,8 @@ public class MainActivity extends AppCompatActivity {
         btnLoop = findViewById(R.id.btnLoopMode);
         btnStop = findViewById(R.id.btnStopLoop);
         btnClearFailsafe = findViewById(R.id.btnClearFailsafe);
+        txtProbeVerdict = findViewById(R.id.txtProbeVerdict);
+        txtProbeReport = findViewById(R.id.txtProbeReport);
 
         findViewById(R.id.btnChooseFolder).setOnClickListener(v -> {
             try {
@@ -85,6 +93,9 @@ public class MainActivity extends AppCompatActivity {
         btnLoop.setOnClickListener(v -> confirmLoopMode());
         btnStop.setOnClickListener(v -> setTestMode());
         btnClearFailsafe.setOnClickListener(v -> confirmClearFailsafe());
+        findViewById(R.id.btnRecorderScan).setOnClickListener(v -> confirmRecorderScan());
+        findViewById(R.id.btnCopyProbe).setOnClickListener(v -> copyDiscoveryReport());
+        findViewById(R.id.btnExportProbe).setOnClickListener(v -> exportDiscoveryReport());
 
         if (prefs.hasSavedFolder()) {
             LoopMonitorService.start(this);
@@ -104,6 +115,92 @@ public class MainActivity extends AppCompatActivity {
         LoopLog.get().removeListener(logListener);
         LoopStateBus.get().removeListener(stateListener);
         super.onStop();
+    }
+
+    private void confirmRecorderScan() {
+        new AlertDialog.Builder(this)
+                .setTitle("SCAN CARFU CAMERA / DVR APPS")
+                .setMessage("CHỈ QUÉT PACKAGE — KHÔNG XÓA VIDEO\n\n"
+                        + "Liệt kê app/service có CAMERA/DVR/record.\n"
+                        + "Không đụng MP4. Không đổi production.")
+                .setNegativeButton("Hủy", null)
+                .setPositiveButton("Quét", (d, w) -> startRecorderScan())
+                .show();
+    }
+
+    private void startRecorderScan() {
+        Toast.makeText(this, "RECORDER DISCOVERY — KHÔNG XÓA VIDEO", Toast.LENGTH_LONG).show();
+        if (txtProbeVerdict != null) {
+            txtProbeVerdict.setText("RECORDER DISCOVERY: đang quét…");
+            txtProbeVerdict.setTextColor(getColor(R.color.warn));
+        }
+        new Thread(() -> {
+            RecorderDiscovery.Report report;
+            try {
+                report = RecorderDiscovery.run(getApplicationContext());
+            } catch (Throwable t) {
+                CrashLog.write(this, t);
+                LoopLog.get().e("RECORDER DISCOVERY crashed", t);
+                report = new RecorderDiscovery.Report();
+                report.scanPass = false;
+                report.verdict = RecorderCandidate.VERDICT_E;
+                report.verdictReason = "scan crashed: " + t.getClass().getName() + ": " + t.getMessage();
+                report.exception = t.getClass().getName() + ": " + t.getMessage();
+                report.body = "SCAN FAILED\n" + report.verdictReason + "\n";
+            }
+            final RecorderDiscovery.Report shown = report;
+            runOnUiThread(() -> showDiscoveryReport(shown));
+        }, "recorder-discovery").start();
+    }
+
+    private void showDiscoveryReport(RecorderDiscovery.Report report) {
+        lastDiscovery = report;
+        if (txtProbeVerdict != null) {
+            txtProbeVerdict.setText("VERDICT " + report.verdict + "\n" + report.verdictReason);
+            boolean ok = report.scanPass && RecorderCandidate.VERDICT_D.equals(report.verdict);
+            txtProbeVerdict.setTextColor(getColor(ok ? R.color.ok : R.color.warn));
+        }
+        if (txtProbeReport != null) {
+            txtProbeReport.setText(report.screenText());
+        }
+        if (txtLog != null) {
+            txtLog.setText(LoopLog.get().text());
+        }
+        Toast.makeText(this, "VERDICT " + report.verdict, Toast.LENGTH_LONG).show();
+    }
+
+    private void copyDiscoveryReport() {
+        if (lastDiscovery == null) {
+            Toast.makeText(this, "Chưa có báo cáo. Bấm SCAN trước.", Toast.LENGTH_LONG).show();
+            return;
+        }
+        ClipboardManager cm = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
+        if (cm == null) {
+            Toast.makeText(this, "Clipboard không dùng được. Dùng EXPORT.", Toast.LENGTH_LONG).show();
+            return;
+        }
+        cm.setPrimaryClip(ClipData.newPlainText("CameraLoop recorder discovery",
+                RecorderDiscovery.fullExportText(lastDiscovery)));
+        Toast.makeText(this, "Đã copy báo cáo", Toast.LENGTH_SHORT).show();
+    }
+
+    private void exportDiscoveryReport() {
+        RecorderDiscovery.Report report = lastDiscovery;
+        if (report == null) {
+            Toast.makeText(this, "Chưa có báo cáo. Bấm SCAN trước.", Toast.LENGTH_LONG).show();
+            return;
+        }
+        File f = RecorderDiscovery.exportFile(this, report);
+        if (f == null) {
+            Toast.makeText(this, "EXPORT FAILED", Toast.LENGTH_LONG).show();
+            return;
+        }
+        report.exportPath = f.getAbsolutePath();
+        lastDiscovery = report;
+        if (txtProbeReport != null) {
+            txtProbeReport.setText(report.screenText());
+        }
+        Toast.makeText(this, "EXPORT: " + f.getAbsolutePath(), Toast.LENGTH_LONG).show();
     }
 
     /**

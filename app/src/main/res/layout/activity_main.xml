@@ -47,6 +47,78 @@
             android:textColor="#FF111111"
             android:textStyle="bold" />
 
+        <Button
+            android:id="@+id/btnRecorderScan"
+            android:layout_width="match_parent"
+            android:layout_height="56dp"
+            android:layout_marginTop="8dp"
+            android:backgroundTint="@color/warn"
+            android:text="SCAN CARFU CAMERA / DVR APPS"
+            android:textColor="#FF111111"
+            android:textStyle="bold" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:text="CHỈ QUÉT PACKAGE — KHÔNG GHI/XÓA VIDEO"
+            android:textColor="@color/warn"
+            android:textSize="13sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/txtProbeVerdict"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:background="@color/surface"
+            android:padding="12dp"
+            android:text="RECORDER DISCOVERY: chưa chạy"
+            android:textColor="@color/warn"
+            android:textSize="20sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/txtProbeReport"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:background="@color/surface"
+            android:fontFamily="monospace"
+            android:minHeight="280dp"
+            android:padding="10dp"
+            android:text="Bấm SCAN CARFU CAMERA / DVR APPS. Kết quả hiện ở đây (không cần ADB)."
+            android:textColor="@color/text"
+            android:textIsSelectable="true"
+            android:textSize="14sp" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:orientation="horizontal">
+
+            <Button
+                android:id="@+id/btnCopyProbe"
+                android:layout_width="0dp"
+                android:layout_height="52dp"
+                android:layout_marginEnd="6dp"
+                android:layout_weight="1"
+                android:text="COPY REPORT"
+                android:textColor="@color/text"
+                android:textSize="12sp" />
+
+            <Button
+                android:id="@+id/btnExportProbe"
+                android:layout_width="0dp"
+                android:layout_height="52dp"
+                android:layout_marginStart="6dp"
+                android:layout_weight="1"
+                android:text="EXPORT REPORT"
+                android:textColor="@color/text"
+                android:textSize="12sp" />
+        </LinearLayout>
+
         <TextView
             android:id="@+id/txtStatus"
             android:layout_width="match_parent"
