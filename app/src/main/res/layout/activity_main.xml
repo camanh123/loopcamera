@@ -47,6 +47,71 @@
             android:textColor="#FF111111"
             android:textStyle="bold" />
 
+        <Button
+            android:id="@+id/btnStartWriter"
+            android:layout_width="match_parent"
+            android:layout_height="56dp"
+            android:layout_marginTop="8dp"
+            android:backgroundTint="@color/warn"
+            android:text="START WRITER DISCOVERY"
+            android:textColor="#FF111111"
+            android:textStyle="bold" />
+
+        <Button
+            android:id="@+id/btnStopWriter"
+            android:layout_width="match_parent"
+            android:layout_height="52dp"
+            android:layout_marginTop="6dp"
+            android:backgroundTint="@color/error"
+            android:text="STOP"
+            android:textColor="@color/text"
+            android:textStyle="bold" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:text="READ / STAT / WATCH ONLY — không xóa, rename, hay ghi MP4"
+            android:textColor="@color/warn"
+            android:textSize="13sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/txtProbeVerdict"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:background="@color/surface"
+            android:fontFamily="monospace"
+            android:padding="12dp"
+            android:text="LIVE MP4 WRITER DISCOVERY\n\nTarget:\n/storage/USB1/DCIM/Camera/*.mp4\n\nState:\nWAITING"
+            android:textColor="@color/text"
+            android:textIsSelectable="true"
+            android:textSize="16sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/txtProbeReport"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:background="@color/surface"
+            android:fontFamily="monospace"
+            android:minHeight="280dp"
+            android:padding="10dp"
+            android:text="Bấm START WRITER DISCOVERY, rồi để OEM DVR ghi như bình thường.\nBáo cáo hiện ở đây (không cần ADB)."
+            android:textColor="@color/text"
+            android:textIsSelectable="true"
+            android:textSize="13sp" />
+
+        <Button
+            android:id="@+id/btnCopyProbe"
+            android:layout_width="match_parent"
+            android:layout_height="52dp"
+            android:layout_marginTop="6dp"
+            android:text="COPY REPORT"
+            android:textColor="@color/text" />
+
         <TextView
             android:id="@+id/txtStatus"
             android:layout_width="match_parent"

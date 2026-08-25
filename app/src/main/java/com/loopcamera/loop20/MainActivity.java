@@ -1,6 +1,9 @@
 package com.loopcamera.loop20;
 
 import android.Manifest;
+import android.content.ClipData;
+import android.content.ClipboardManager;
+import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
@@ -41,6 +44,9 @@ public class MainActivity extends AppCompatActivity {
     private Button btnLoop;
     private Button btnStop;
     private Button btnClearFailsafe;
+    private TextView txtProbeVerdict;
+    private TextView txtProbeReport;
+    private String lastWriterReport;
 
     private final LoopLog.Listener logListener = text -> {
         if (txtLog != null) {
@@ -49,6 +55,7 @@ public class MainActivity extends AppCompatActivity {
     };
 
     private final LoopStateBus.Listener stateListener = this::renderState;
+    private final WriterDiscoveryBus.Listener writerListener = this::renderWriter;
 
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
@@ -70,6 +77,8 @@ public class MainActivity extends AppCompatActivity {
         btnLoop = findViewById(R.id.btnLoopMode);
         btnStop = findViewById(R.id.btnStopLoop);
         btnClearFailsafe = findViewById(R.id.btnClearFailsafe);
+        txtProbeVerdict = findViewById(R.id.txtProbeVerdict);
+        txtProbeReport = findViewById(R.id.txtProbeReport);
 
         findViewById(R.id.btnChooseFolder).setOnClickListener(v -> {
             try {
@@ -85,6 +94,9 @@ public class MainActivity extends AppCompatActivity {
         btnLoop.setOnClickListener(v -> confirmLoopMode());
         btnStop.setOnClickListener(v -> setTestMode());
         btnClearFailsafe.setOnClickListener(v -> confirmClearFailsafe());
+        findViewById(R.id.btnStartWriter).setOnClickListener(v -> confirmStartWriterDiscovery());
+        findViewById(R.id.btnStopWriter).setOnClickListener(v -> stopWriterDiscovery());
+        findViewById(R.id.btnCopyProbe).setOnClickListener(v -> copyWriterReport());
 
         if (prefs.hasSavedFolder()) {
             LoopMonitorService.start(this);
@@ -97,13 +109,81 @@ public class MainActivity extends AppCompatActivity {
         super.onStart();
         LoopLog.get().addListener(logListener);
         LoopStateBus.get().addListener(stateListener);
+        WriterDiscoveryBus.get().addListener(writerListener);
     }
 
     @Override
     protected void onStop() {
         LoopLog.get().removeListener(logListener);
         LoopStateBus.get().removeListener(stateListener);
+        WriterDiscoveryBus.get().removeListener(writerListener);
         super.onStop();
+    }
+
+    private void confirmStartWriterDiscovery() {
+        new AlertDialog.Builder(this)
+                .setTitle("START WRITER DISCOVERY")
+                .setMessage("CHỈ ĐỌC / STAT / WATCH — KHÔNG XÓA VIDEO\n\n"
+                        + "Theo dõi /storage/USB1/DCIM/Camera/*.mp4 (và alias USB).\n"
+                        + "Không rename, không mở ghi, không đổi LOOP MODE.\n\n"
+                        + "Bấm START, rồi để OEM DVR ghi như bình thường.")
+                .setNegativeButton("Hủy", null)
+                .setPositiveButton("START", (d, w) -> startWriterDiscovery())
+                .show();
+    }
+
+    private void startWriterDiscovery() {
+        Toast.makeText(this, "WRITER DISCOVERY — READ/STAT/WATCH ONLY", Toast.LENGTH_LONG).show();
+        if (txtProbeVerdict != null) {
+            txtProbeVerdict.setText("LIVE MP4 WRITER DISCOVERY\n\nState:\nWAITING");
+            txtProbeVerdict.setTextColor(getColor(R.color.warn));
+        }
+        WriterDiscoveryService.start(this);
+    }
+
+    private void stopWriterDiscovery() {
+        WriterDiscoveryService.stop(this);
+        Toast.makeText(this, "STOP writer discovery", Toast.LENGTH_SHORT).show();
+    }
+
+    private void renderWriter(WriterDiscoveryBus.Snapshot snap) {
+        if (snap == null) {
+            return;
+        }
+        lastWriterReport = snap.reportText;
+        if (txtProbeVerdict != null) {
+            txtProbeVerdict.setText(snap.liveText);
+            String level = snap.model == null ? "" : snap.model.confidence;
+            int color = R.color.warn;
+            if (WriterConfidence.PROVEN.equals(level)) {
+                color = R.color.ok;
+            } else if (WriterConfidence.UNKNOWN.equals(level)) {
+                color = R.color.text;
+            }
+            txtProbeVerdict.setTextColor(getColor(color));
+        }
+        if (txtProbeReport != null) {
+            txtProbeReport.setText(snap.reportText);
+        }
+    }
+
+    private void copyWriterReport() {
+        String report = lastWriterReport;
+        if (report == null || report.trim().isEmpty()) {
+            WriterDiscoveryBus.Snapshot snap = WriterDiscoveryBus.get().latest();
+            report = snap == null ? null : snap.reportText;
+        }
+        if (report == null || report.trim().isEmpty()) {
+            Toast.makeText(this, "Chưa có báo cáo. Bấm START trước.", Toast.LENGTH_LONG).show();
+            return;
+        }
+        ClipboardManager cm = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
+        if (cm == null) {
+            Toast.makeText(this, "Clipboard không dùng được.", Toast.LENGTH_LONG).show();
+            return;
+        }
+        cm.setPrimaryClip(ClipData.newPlainText("CameraLoop MP4 writer discovery", report));
+        Toast.makeText(this, "Đã copy báo cáo", Toast.LENGTH_SHORT).show();
     }
 
     /**
